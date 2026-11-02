@@ -7,6 +7,7 @@
 고1 학기별·과목별 5등급제 내신 기반 수도권 **4년제·전문대** 지원 가능성 예측 + 상위 대학을 위한 보강 과목 추천(What-if) + 고2·고3 로드맵 Agentic RAG 웹서비스. 상세는 `SERVICE.md`, 화면은 `docs/SCREEN_SPEC.md`.
 - 대상 학생: 2010년생, 2026년 고1 → **2029학년도 대입**. 2029 시행계획(2027년 봄 공개) 전까지 2028 자료를 proxy로 쓰고 학년도를 항상 명시
 - 대상 성적대: 1등급 최상위가 아닌 2~3등급대
+- MVP 데이터: 간호(4년제 15 + 전문대 1)와 컴퓨터공학(4년제 11) 두 계열. 학과 무관 구조를 유지하고 특정 학과 전용 코드를 만들지 않는다
 
 ## 과제 필수 규약
 - 폴더: `src/`(agent.py · tools.py · retriever.py), `data/`, `evaluation/`(test_queries.csv · round1_report.md · round2_report.md), `SERVICE.md`, `README.md`, `requirements.txt`
