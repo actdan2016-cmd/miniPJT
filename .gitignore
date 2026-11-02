@@ -1,0 +1,7 @@
+# 대학 원본 PDF는 링크로만 관리 (공개 레포에는 가공 CSV만)
+data/raw/**/*.pdf
+data/raw/**/*.xlsx
+data/raw/**/*.hwp
+# 자녀 학교명·교육과정 등 개인 정보
+data/private/
+.env
