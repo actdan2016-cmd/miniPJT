@@ -14,7 +14,7 @@
   - 확인: 인하대 컴퓨터공학과 지역균형 2026 조회 → 25명·7.1:1·충원 42·2.19/2.28 (7번 정답)
 - [x] **A4. `src/tools.py` 1차 도구 3개**: `calc_school_gpa`, `lookup_admission_results`, `classify_chances` (도구 docstring 첫 줄은 "언제 쓰는지")
   - 확인: 도구를 직접 호출해 3번 정답(수원대 교과우수=상향 c=3.43 등)과 22번 정답(누적 2.28 → 3.89)이 나온다
-- [ ] **A5. `src/api.py` 계산 API + 화면 서빙**: FastAPI가 `web/`을 띄우고 `POST /api/grades/analyze`, `POST /api/predict`는 도구를 직접 호출(LLM 없음)
+- [x] **A5. `src/api.py` 계산 API + 화면 서빙**: FastAPI가 `web/`을 띄우고 `POST /api/grades/analyze`, `POST /api/predict`는 도구를 직접 호출(LLM 없음)
   - 확인: http://localhost:8000/docs 에서 22번 성적으로 두 API를 호출해 2.28·3.89와 판정 목록이 온다
 - [ ] **A6. 화면 1·2 (성적 입력·성적 분석)**: 시안 Main·Analysis를 `web/`으로 옮기고 A5 API에 연결
   - 확인: 브라우저에서 "예시 학생으로 체험" → 1-1 2.35·1-2 2.22, 분석 화면 누적 2.28·국영수사 2.25·국영수과 2.50·9등급 3.89
