@@ -5,8 +5,8 @@ const PAGES = [
   { href: 'index.html', label: '성적 입력', ready: true },
   { href: 'analysis.html', label: '성적 분석', ready: true },
   { href: 'universities.html', label: '지원 가능 대학', ready: true },
-  { href: 'improve.html', label: '보강 과목', ready: false },
-  { href: 'roadmap.html', label: '학습 로드맵', ready: false },
+  { href: 'improve.html', label: '보강 과목', ready: true },
+  { href: 'roadmap.html', label: '학습 로드맵', ready: true },
   { href: 'chat.html', label: '상담', ready: true },
 ];
 const SEMESTERS = ['1-1', '1-2', '2-1', '2-2', '3-1'];

@@ -115,7 +115,64 @@ def render_results(r: dict) -> str:
                       *[f"- {n}" for n in r.get("notes", [])]])
 
 
-RENDERERS = {"calc_school_gpa": render_gpa, "classify_chances": render_chances, "lookup_admission_results": render_results}
+def render_conversion(r: dict) -> str:
+    """convert_grade_5to9 결과 → 한 줄 표"""
+    return "\n".join(["| 5등급 평균 | 누적 백분위(근사) | 9등급 환산(근사) |", "|---|---|---|",
+                      f"| {_f(r['avg5'])} | {r['percentile']}% | {_f(r['grade9'])} |", "", f"방법: {r['method']}"])
+
+
+def render_simulation(r: dict) -> str:
+    """simulate_improvement 결과 → 목표별 필요 평균 표 + 교과군 효과 표"""
+    if r.get("error"):
+        return r["error"]
+    c = r["current"]
+    out = [f"**보강 시뮬레이션 (What-if)** · 지금 누적 {_f(c['avg5'])} (9등급 약 {_f(c['grade9'])}) · "
+           f"남은 {r['remaining_semesters']}학기 약 {r['future_credits_assumed']}학점 가정", ""]
+    if r["targets"]:
+        out += ["| 목표 | 지금 판정 | 기준선(9등급) | 소신선까지 남은 학기 평균 | 적정선까지 남은 학기 평균 |", "|---|---|---|---|---|"]
+        hard = lambda v, ok: _f(v) + ("" if ok else " (모두 1등급이어도 어려움)")
+        for t in r["targets"]:
+            out.append(f"| {_short_univ(t['univ_name'])} {t['track_name']} | {t['current_label']} | {_f(t['cut9'])} | "
+                       f"{hard(t['required_future_avg_sosin'], t['sosin_reachable'])} | {hard(t['required_future_avg'], t['reachable'])} |")
+    out += ["", "| 교과군 | 학점 비중 | 지금 평균 | 1등급 올릴 여유 |", "|---|---|---|---|"]
+    out += [f"| {g['group']} | {g['share'] * 100:.1f}% | {_f(g['avg'])} | {_f(g['room'])} |" for g in r["group_effects"]]
+    p = r.get("projection")
+    if p:
+        out += ["", f"남은 학기를 평균 {_f(p['future_avg'])}로 받으면: 누적 {_f(p['projected_avg5'])} → 9등급 약 {_f(p['projected_grade9'])} · "
+                + ", ".join(f"{_short_univ(t['univ_name'])} {t['track_name']} {t['label']}" for t in p["targets"])]
+    out += [f"- {n}" for n in r.get("notes", [])]
+    return "\n".join(out)
+
+
+def render_courses(r: dict) -> str:
+    """get_recommended_courses 결과 → 대학별 권장과목 표"""
+    rows = [x for x in r["results"] if x["designated"]]
+    none = [_short_univ(x["univ_name"]) for x in r["results"] if not x["designated"]]
+    out = [f"**대학별 권장·핵심 과목** ('{r['keyword']}')", ""]
+    if rows:
+        out += ["| 대학 | 모집단위 | 핵심 과목 | 권장 과목 | 출처 |", "|---|---|---|---|---|"]
+        out += [f"| {_short_univ(x['univ_name'])} | {x['field_or_dept']} | {', '.join(x['core_courses']) or '–'} | "
+                f"{', '.join(x['recommended_courses']) or '–'} | {x['source_doc']} p.{x['source_page']} |" for x in rows]
+    if none:
+        out += ["", f"권장과목을 따로 지정하지 않은 대학: {', '.join(none)}"]
+    out += [f"- {n}" for n in r.get("notes", [])]
+    return "\n".join(out)
+
+
+def render_programs(r: dict) -> str:
+    """search_programs 결과 → 대학별 모집단위 표"""
+    if not r["universities"]:
+        return "\n".join(r["notes"])
+    lines = [f"**'{r['keyword']}' 관련 모집단위** · {r['count_univs']}개 대학 {r['count_units']}개 모집단위", "",
+             "| 대학 | 구분 | 지역 | 모집단위 |", "|---|---|---|---|"]
+    lines += [f"| {_short_univ(u['univ_name'])} | {u['univ_type']} | {u['region']}{'' if u['is_metro'] else ' (수도권 외)'} | {', '.join(u['units'])} |"
+              for u in r["universities"]]
+    return "\n".join(lines + [f"- {n}" for n in r["notes"]])
+
+
+RENDERERS = {"calc_school_gpa": render_gpa, "classify_chances": render_chances, "lookup_admission_results": render_results,
+             "convert_grade_5to9": render_conversion, "simulate_improvement": render_simulation,
+             "get_recommended_courses": render_courses, "search_programs": render_programs}
 
 
 def render_tables(tool_results: list[tuple[str, dict]]) -> str:

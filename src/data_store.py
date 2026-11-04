@@ -141,3 +141,29 @@ def admission_plans(univ_id: str | None = None, unit: str | None = None, year: i
             and (not unit or unit in p["unit_name"])
             and (not year or p["admission_year"] == year)
             and (not track_type_ or p["track_type"] == track_type_)]
+
+
+# ---------- 학생 프로필 저장 (LangGraph Store, 승인 후에만 저장) ----------
+PROFILE_DB = Path(__file__).resolve().parents[1] / "profiles.sqlite"
+
+
+@lru_cache(maxsize=1)
+def _profile_store():
+    """프로필 저장소 (LangGraph SqliteStore). 별칭을 키로, 이름·학교명은 저장하지 않는다."""
+    import sqlite3
+
+    from langgraph.store.sqlite import SqliteStore
+    store = SqliteStore(sqlite3.connect(PROFILE_DB, check_same_thread=False, isolation_level=None))
+    store.setup()
+    return store
+
+
+def save_profile(alias: str, profile: dict) -> None:
+    """별칭으로 프로필(희망 학과·계열·과목 성적)을 저장한다."""
+    _profile_store().put(("profiles",), alias, profile)
+
+
+def load_profile(alias: str) -> dict | None:
+    """별칭으로 저장한 프로필을 읽는다. 없으면 None."""
+    item = _profile_store().get(("profiles",), alias)
+    return item.value if item else None

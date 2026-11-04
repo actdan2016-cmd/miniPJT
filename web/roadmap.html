@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시나침반 · 학습 로드맵</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<style>
+.timeline { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.timeline li { padding: 12px 14px; border-left: 4px solid var(--primary); background: var(--bg); border-radius: 8px; }
+.timeline b { display: block; color: var(--primary-dark); }
+.sem { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.sem h3 { margin: 14px 0 6px; font-size: 14px; color: var(--muted); }
+.chip { display: inline-block; margin: 0 6px 6px 0; padding: 6px 10px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: 13px; }
+.chip.core { background: var(--navy); color: #FFFFFF; }
+.sem ul { margin: 0; padding-left: 18px; line-height: 1.7; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="site-top"></div>
+<main class="wrap">
+  <div>
+    <h1>학습 로드맵</h1>
+    <p class="lead" id="lead">희망 학과와 성적을 바탕으로 2·3학년 계획을 정리합니다.</p>
+  </div>
+  <p class="error" id="msg" hidden></p>
+  <section class="card">
+    <h2>놓치면 안 되는 시점 (2029학년도 대입)</h2>
+    <ol class="timeline">
+      <li><b>2027년 4~5월</b>2029학년도 시행계획 공개 → 목표 대학 전형을 확정치로 교체</li>
+      <li><b>2028년 상반기</b>2028학년도 입시결과 공개 → 첫 5등급제 실측 컷으로 직접 비교</li>
+      <li><b>2028년 9월</b>수시 원서 접수 · 학생부는 3학년 1학기까지 반영</li>
+      <li><b>2028년 11월</b>수능 · 수능최저가 있는 전형 대비</li>
+    </ol>
+  </section>
+  <div id="content"></div>
+</main>
+<script>
+renderHeader('roadmap.html');
+const $ = (id) => document.getElementById(id);
+const profile = Store.load() || emptyProfile();
+const subjects = validSubjects(profile.subjects);
+
+function chips(list, cls) { return list.map((c) => el('span', { class: 'chip' + (cls ? ' ' + cls : '') }, c)); }
+
+async function main() {
+  const keyword = (profile.major || '').trim();
+  if (!keyword || !subjects.some((x) => x.grade != null)) {
+    $('content').replaceChildren(el('div', { class: 'empty-state' }, el('p', {}, '성적과 희망 학과를 먼저 입력해 주세요.'),
+      el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
+    return;
+  }
+  $('content').replaceChildren(spinner('권장과목과 보강 우선순위를 불러오는 중입니다.'));
+  try {
+    const [sim, crs] = await Promise.all([api('/api/simulate', { subjects, keyword }), api(`/api/courses?keyword=${encodeURIComponent(keyword)}`)]);
+    if (sim.error) throw new Error(sim.error);
+    $('lead').textContent = `희망 학과 ${keyword} · 2029학년도 대입 · 누적 ${fmt(sim.current.avg5)} (9등급 약 ${fmt(sim.current.grade9)})`;
+    const focus = sim.group_effects.filter((g) => g.avg > 1.5).slice(0, 3);
+    const designated = crs.results.filter((x) => x.designated);
+    const core = [...new Set(designated.flatMap((x) => x.core_courses))];
+    const rec = [...new Set(designated.flatMap((x) => x.recommended_courses))].filter((c) => !core.includes(c));
+    const target = sim.targets[0];
+    const focusList = el('ul', {}, focus.length ? focus.map((g) => el('li', {}, el('strong', {}, g.group), ` · 지금 평균 ${fmt(g.avg)}, 학점 비중 ${(g.share * 100).toFixed(1)}%`))
+      : el('li', {}, '모든 교과군이 1등급대입니다. 지금 수준 유지가 목표입니다.'));
+    $('content').replaceChildren(el('div', { style: 'display: flex; flex-direction: column; gap: 24px' },
+      el('div', { class: 'sem' },
+        el('section', { class: 'card' }, el('h2', {}, '2학년 1학기'), el('span', { class: 'small' }, '평균을 끌어올릴 효과가 가장 큰 시기'),
+          el('h3', {}, '집중 교과군 (학점 비중 × 남은 폭 순)'), focusList,
+          el('h3', {}, '선택과목 후보 (학교 개설 과목 중)'), el('div', {}, chips(core, 'core'), chips(rec.slice(0, 8))),
+          el('h3', {}, '할 일'), el('ul', {}, el('li', {}, '담임 상담에서 2학년 개설 과목 확인'), el('li', {}, '학기말 성적을 입력하고 다시 분석'))),
+        el('section', { class: 'card' }, el('h2', {}, '2학년 2학기'), el('span', { class: 'small' }, '2-1 결과로 다시 계산'),
+          el('h3', {}, '목표'), el('ul', {}, target ? el('li', {}, `${target.univ_name} ${target.track_name}: 남은 학기 평균 ${fmt(target.required_future_avg)}`, target.reachable ? '이면 적정선' : ' (모두 1등급이어도 어려움)')
+            : el('li', {}, '목표 전형을 보강 과목 화면에서 정해 주세요.')),
+          el('h3', {}, '3학년 선택과목 정하기'), el('div', {}, chips(rec.slice(8, 14).length ? rec.slice(8, 14) : rec.slice(0, 4))),
+          el('h3', {}, '할 일'), el('ul', {}, el('li', {}, '보강 과목 화면에서 2-1 실제 성적으로 다시 시뮬레이션'), el('li', {}, '희망 학과 권장과목 성취도 관리'))),
+        el('section', { class: 'card' }, el('h2', {}, '3학년 1학기'), el('span', { class: 'small' }, '수시 학생부 반영 마지막 학기'),
+          el('h3', {}, '할 일'), el('ul', {}, el('li', {}, '2029학년도 시행계획(2027년 4~5월 공개)으로 지원 전형 확정'),
+            el('li', {}, '수능최저가 있는 전형이면 수능 영역 준비'), el('li', {}, '지원 가능 대학 화면에서 상향·소신·적정·안정을 고르게 구성')))),
+      el('section', { class: 'card' }, el('h2', {}, `대학별 권장·핵심 과목 (${keyword})`),
+        designated.length ? el('div', { class: 'table-scroll' }, el('table', { class: 'grades', style: 'min-width: 640px' },
+          el('thead', {}, el('tr', {}, ['대학', '모집단위', '핵심 과목', '권장 과목', '출처'].map((h) => el('th', { scope: 'col' }, h)))),
+          el('tbody', {}, designated.map((x) => el('tr', {}, el('td', {}, x.univ_name), el('td', {}, x.field_or_dept),
+            el('td', {}, x.core_courses.join(', ') || '–'), el('td', {}, x.recommended_courses.join(', ') || '–'),
+            el('td', { class: 'small' }, `${x.source_doc} p.${x.source_page}`))))))
+          : el('p', { class: 'small' }, '이 학과는 권장과목 자료가 없습니다.'),
+        el('p', { class: 'small', style: 'margin: 12px 0 0' }, `권장과목을 따로 지정하지 않은 대학: ${crs.results.filter((x) => !x.designated).map((x) => x.univ_name).join(', ') || '없음'}`)),
+      el('p', { class: 'small', style: 'margin: 0' }, crs.notes.join(' '))));
+  } catch (e) { $('content').replaceChildren(); $('msg').textContent = e.message; $('msg').hidden = false; }
+}
+main();
+</script>
+</body>
+</html>

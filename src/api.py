@@ -18,10 +18,11 @@ from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel, Field
 
 from src import data_store as ds
-from src.agent import ask, build_agent, open_checkpointer
+from src.agent import ask, build_agent, open_checkpointer, resume
 from src.guardrails import finalize
 from src.middleware import mask_pii
-from src.tools import GpaInput, calc_school_gpa, classify_chances
+from src.tools import (GpaInput, SimulateInput, SubjectGrade, save_student_profile, calc_school_gpa, classify_chances, get_recommended_courses,
+                       simulate_improvement)
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
@@ -34,6 +35,20 @@ class PredictRequest(BaseModel):
     keyword: str = Field(min_length=1, description="희망 학과 키워드. 예: 간호, 컴퓨터")
     univ_type: Literal["전체", "4년제", "전문대"] = "전체"
     year: int = Field(default=2026, description="비교할 입결 학년도")
+
+
+class ResumeRequest(BaseModel):
+    """승인 대기 중인 도구 호출(프로필 저장)에 대한 사용자 결정"""
+    thread_id: str
+    approve: bool
+
+
+class ProfileRequest(BaseModel):
+    """화면 1 '프로필 저장' (확인 창에서 사용자가 승인한 뒤 호출)"""
+    alias: str = Field(min_length=1, max_length=20, description="학생 이름 대신 쓸 별칭")
+    major: str = ""
+    field: str = ""
+    subjects: list[SubjectGrade] = Field(default_factory=list)
 
 
 class QueryRequest(BaseModel):
@@ -65,6 +80,29 @@ def _tool_contexts(name: str, result: dict) -> list[dict]:
         g9 = cum["grade9"]["grade9"] if cum.get("grade9") else None
         return [{"doc_id": "계산: calc_school_gpa (grades.py 학점 가중 평균)",
                  "text": f"{sems} / 누적 전과목 {cum['avg']} ({cum['formula']}) → 9등급 환산 {g9}"}]
+    if name == "retrieve_admission_docs":
+        # 검색한 문서 청크를 그대로 근거로 쓴다 (RAGAS contexts)
+        if not result.get("found"):
+            return [{"doc_id": "검색: retrieve_admission_docs", "text": result.get("message", "")}] if result.get("message") else []
+        return [{"doc_id": f"{r['source']} p.{r['page']}", "text": r["text"]} for r in result["results"]]
+    if name == "convert_grade_5to9":
+        return [{"doc_id": "계산: convert_grade_5to9 (grades.py 5→9 환산)",
+                 "text": f"5등급 {result['avg5']} → 누적 백분위 {result['percentile']}% → 9등급 {result['grade9']} ({result['method']})"}]
+    if name == "search_programs":
+        return [{"doc_id": "조회: search_programs (programs.csv)",
+                 "text": "\n".join(f"{u['univ_name']}({u['univ_type']}, {u['region']}): {', '.join(u['units'])}" for u in result["universities"])
+                         or "; ".join(result["notes"])}]
+    if name == "save_student_profile":
+        return [{"doc_id": "저장: save_student_profile", "text": result.get("message", "")}]
+    if name == "simulate_improvement" and not result.get("error"):
+        return [{"doc_id": "계산: simulate_improvement (grades.py 역환산·필요 평균)",
+                 "text": "\n".join(f"{t['univ_name']} {t['track_name']} 기준선 {t['cut9']}(9등급) → 5등급 {t['target_avg5']} → "
+                                   f"남은 학기 필요 평균 {t['required_future_avg']}" for t in result["targets"])
+                         + "\n교과군: " + ", ".join(f"{g['group']} 비중 {g['share']} 평균 {g['avg']}" for g in result["group_effects"])}]
+    if name == "get_recommended_courses":
+        return [{"doc_id": f"{x['source_doc']} p.{x['source_page']}",
+                 "text": f"{x['univ_name']} {x['field_or_dept']}: 핵심 {', '.join(x['core_courses']) or '없음'} / "
+                         f"권장 {', '.join(x['recommended_courses']) or '없음'} ({x['note']})"} for x in result["results"]]
     rows = []
     if name == "classify_chances":
         conv = result["conversion"]
@@ -170,27 +208,70 @@ def predict(req: PredictRequest) -> dict:
     return _call(classify_chances, req.model_dump())
 
 
-@app.post("/query")
-def query(req: QueryRequest) -> dict:
-    """상담 챗 (과제 표준 규약) → {"answer", "contexts": [{"doc_id","text"}], "trace": [{"step","input","output"}]}"""
-    thread_id = req.thread_id or uuid.uuid4().hex
-    start = time.time()
-    out = ask(_agent(), req.question, thread_id)
+@app.post("/api/simulate")
+def simulate(req: SimulateInput) -> dict:
+    """보강 과목 What-if: 목표별 남은 학기 필요 평균, 교과군 효과, 예상 평균 가정 → simulate_improvement"""
+    return _call(simulate_improvement, req.model_dump())
+
+
+@app.get("/api/courses")
+def courses(keyword: str, univ_name: str | None = None) -> dict:
+    """학과 키워드별 대학 권장·핵심 과목 → get_recommended_courses"""
+    return _call(get_recommended_courses, {"keyword": keyword, "univ_name": univ_name})
+
+
+def _respond(question: str, thread_id: str, out: dict, start: float) -> dict:
+    """에이전트 결과 → {answer, contexts, trace, thread_id, pending_approval}"""
     messages = out["messages"]
     blocked = any(isinstance(m, AIMessage) and m.name == "input_guard" for m in messages)
     guard = None
     answer = out["answer"]
-    if not blocked:
+    if not blocked and not out.get("pending_approval"):
         # LLM 요약 + 코드 결과표 + 고지. 요약에 위반이 있으면 결과표만 보여 준다 (guardrails.finalize)
-        allowed = mask_pii(req.question)[0] + "\n" + "\n".join(str(m.content) for m in messages if isinstance(m, ToolMessage))
+        allowed = mask_pii(question)[0] + "\n" + "\n".join(str(m.content) for m in messages if isinstance(m, ToolMessage))
         answer, guard = finalize(out["answer"], _tool_results(messages), allowed)
-    contexts, trace = _contexts_and_trace(req.question, messages, answer)
+    contexts, trace = _contexts_and_trace(question, messages, answer)
     if guard is not None:
         trace.insert(len(trace) - 1, {"step": "output_guard", "input": {"tables": guard["tables"]},
                                       "output": "위반 없음" if not guard["violations"]
                                       else f"위반 {guard['violations']} → 요약을 빼고 결과표만 표시"})
+    if out.get("pending_approval"):
+        trace.append({"step": "human_approval", "input": out["pending_approval"], "output": "사용자 승인 대기"})
     trace.append({"step": "total", "input": {"thread_id": thread_id}, "output": f"{time.time() - start:.1f}초"})
-    return {"answer": answer, "contexts": contexts, "trace": trace, "thread_id": thread_id}
+    return {"answer": answer, "contexts": contexts, "trace": trace, "thread_id": thread_id,
+            "pending_approval": out.get("pending_approval")}
+
+
+@app.post("/query")
+def query(req: QueryRequest) -> dict:
+    """상담 챗 (과제 표준 규약) → {"answer", "contexts": [{"doc_id","text"}], "trace": [{"step","input","output"}]}
+    + thread_id, pending_approval(프로필 저장 승인 대기일 때)"""
+    thread_id = req.thread_id or uuid.uuid4().hex
+    start = time.time()
+    return _respond(req.question, thread_id, ask(_agent(), req.question, thread_id), start)
+
+
+@app.post("/query/resume")
+def query_resume(req: ResumeRequest) -> dict:
+    """승인 대기 중인 프로필 저장을 승인/거절하고 이어서 답을 받는다 (HITL)"""
+    start = time.time()
+    return _respond("(승인 결정) " + ("승인" if req.approve else "거절"), req.thread_id, resume(_agent(), req.thread_id, req.approve), start)
+
+
+@app.post("/api/profile")
+def save_profile(req: ProfileRequest) -> dict:
+    """화면 1 프로필 저장: 사용자가 확인 창에서 승인한 뒤에만 호출된다 → save_student_profile"""
+    return _call(save_student_profile, {"alias": req.alias, "major": req.major, "field": req.field or None,
+                                        "subjects": [s.model_dump() for s in req.subjects]})
+
+
+@app.get("/api/profile/{alias}")
+def get_profile(alias: str) -> dict:
+    """별칭으로 저장한 프로필 불러오기"""
+    p = ds.load_profile(alias)
+    if p is None:
+        raise HTTPException(status_code=404, detail="저장된 프로필이 없습니다.")
+    return {"alias": alias, **p}
 
 
 # 화면 파일은 API 경로 뒤에 붙인다. web/ 이 아직 없으면 안내만 돌려준다

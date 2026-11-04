@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시나침반 · 보강 과목</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<style>
+.plan { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.plan li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.stepper { display: inline-flex; align-items: center; gap: 6px; }
+.stepper button { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 18px; cursor: pointer; }
+.stepper span { min-width: 56px; text-align: center; font-weight: 600; }
+.bar { height: 8px; border-radius: 4px; background: var(--primary-soft); overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; background: var(--primary); }
+.tier { display: inline-block; padding: 6px 12px; border-radius: 8px; font-weight: 700; background: var(--primary-soft); color: var(--primary-dark); }
+</style>
+</head>
+<body>
+<div id="site-top"></div>
+<main class="wrap">
+  <div>
+    <h1>보강 과목 · What-if</h1>
+    <p class="lead">2학년 1학기 과목별 목표 등급을 바꿔 보면, 고1 누적과 합친 평균·9등급·판정과 남은 학기에 필요한 평균이 바로 다시 계산됩니다.</p>
+  </div>
+  <p class="error" id="msg" hidden></p>
+  <section class="card" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 200px">
+      <label class="lbl" for="kw">희망 학과 키워드</label>
+      <input id="kw" class="field" type="text" placeholder="예: 간호, 컴퓨터">
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 2 1 320px">
+      <label class="lbl" for="target">목표 전형</label>
+      <select id="target" class="field"><option value="">가장 가까운 상위 목표 (자동)</option></select>
+    </div>
+  </section>
+  <div id="content"></div>
+</main>
+<script>
+renderHeader('improve.html');
+const $ = (id) => document.getElementById(id);
+const profile = Store.load() || emptyProfile();
+const base = validSubjects(profile.subjects);
+let plan = [];      // 2학년 1학기 가정 과목 (기본 = 가장 최근 학기 성적 유지)
+let targets = [];   // 목표 후보 (자동으로 고른 목표)
+let timer = null;
+
+function initPlan() {
+  const last = SEMESTERS.filter((s) => base.some((x) => x.semester === s)).pop();
+  plan = base.filter((x) => x.semester === last && x.grade != null).map((x) => ({ ...x, semester: '2-1', subject: x.subject.replace(/\d$/, '') + '(2-1 가정)' }));
+}
+
+function stat(title, value, sub) {
+  return el('section', { class: 'card' }, el('h2', { class: 'stat-label' }, title), el('div', { class: 'big primary', style: 'margin-top: 8px' }, value), el('p', { class: 'small', style: 'margin: 4px 0 0' }, sub));
+}
+
+function render(res) {
+  const c = res.current;
+  const sel = $('target').value;
+  const t = res.targets.find((x) => `${x.univ_name}|${x.track_name}` === sel) || res.targets[0];
+  const planList = el('ul', { class: 'plan' }, plan.map((p, i) => el('li', {},
+    el('div', {}, el('div', { style: 'font-weight: 600' }, p.group), el('div', { class: 'small' }, `${p.credits}학점`)),
+    el('div', { class: 'stepper' },
+      el('button', { type: 'button', 'aria-label': `${p.group} 한 등급 올리기`, onClick: () => { if (p.grade > 1) { p.grade--; schedule(); } } }, '−'),
+      el('span', {}, `${p.grade}등급`),
+      el('button', { type: 'button', 'aria-label': `${p.group} 한 등급 내리기`, onClick: () => { if (p.grade < 5) { p.grade++; schedule(); } } }, '+')))));
+  const maxEff = Math.max(...res.group_effects.map((g) => g.share * g.room), 0.0001);
+  $('content').replaceChildren(el('div', { style: 'display: flex; flex-direction: column; gap: 24px' },
+    t ? el('p', { class: 'note', style: 'background: var(--surface); border: 1px solid var(--line); font-size: 14px' },
+      `목표: ${t.univ_name} ${t.unit_name} ${t.track_name} · 2026 ${t.basis} ${fmt(t.cut9)}(9등급) ≈ 5등급 ${fmt(t.target_avg5)} · 출처: ${friendlySource(t.source_doc)}`) : null,
+    el('div', { class: 'grid-cards' },
+      stat(`누적 평균 (${c.semesters_done.join('·')})`, fmt(c.avg5), `${c.sum} ÷ ${c.credits}학점 · 2학년 1학기는 가정값`),
+      stat('9등급 환산', fmt(c.grade9), t ? `컷까지 ${t.gap > 0 ? '+' : ''}${fmt(t.gap)}` : ''),
+      el('section', { class: 'card' }, el('h2', { class: 'stat-label' }, '판정'), el('div', { style: 'margin-top: 12px' }, el('span', { class: 'tier' }, t ? t.current_label : '–')),
+        el('p', { class: 'small', style: 'margin: 8px 0 0' }, t ? [
+          t.sosin_reachable ? `남은 ${res.remaining_semesters}학기 평균 ${fmt(t.required_future_avg_sosin)}이면 소신선` : `소신선은 모두 1등급이어도 어려움`,
+          ' · ',
+          t.reachable ? `${fmt(t.required_future_avg)}이면 적정선` : `적정선은 모두 1등급이어도 어려움(필요 ${fmt(t.required_future_avg)})`].join('') : ''))),
+    el('div', { class: 'row stretch' },
+      el('section', { class: 'card grow' }, el('h2', {}, '2학년 1학기 목표 등급'), el('p', { class: 'small', style: 'margin: -6px 0 12px' }, '기본값 = 가장 최근 학기 성적 유지 가정 · 학점은 최근 학기와 같다고 가정'),
+        planList, el('button', { type: 'button', class: 'btn', style: 'margin-top: 12px', onClick: () => { initPlan(); schedule(); } }, '최근 학기 성적 유지로 되돌리기')),
+      el('section', { class: 'card', style: 'flex: 1 1 340px' }, el('h2', {}, '1등급 올리면 효과가 큰 교과군'), el('p', { class: 'small', style: 'margin: -6px 0 12px' }, '학점 비중 × 1등급까지 남은 폭 순'),
+        el('ol', { class: 'insights', style: 'list-style: none' }, res.group_effects.map((g, i) => el('li', {},
+          el('div', { style: 'display: flex; justify-content: space-between' }, el('strong', {}, `${i + 1}. ${g.group}`), el('span', { class: 'small' }, `평균 ${fmt(g.avg)} · 비중 ${(g.share * 100).toFixed(1)}%`)),
+          el('div', { class: 'bar' }, el('i', { style: `width: ${Math.round(g.share * g.room / maxEff * 100)}%` }))))))),
+    el('section', { class: 'card' }, el('h2', {}, '목표별 남은 학기 필요 평균'),
+      el('div', { class: 'table-scroll' }, el('table', { class: 'grades', style: 'min-width: 640px' },
+        el('thead', {}, el('tr', {}, ['목표', '지금 판정', '기준선(9등급)', `소신선까지 남은 ${res.remaining_semesters}학기 평균`, `적정선까지 남은 ${res.remaining_semesters}학기 평균`].map((h) => el('th', { scope: 'col' }, h)))),
+        el('tbody', {}, res.targets.map((x) => el('tr', {}, el('td', {}, `${x.univ_name} ${x.track_name}`), el('td', {}, x.current_label),
+          el('td', { class: 'tabular' }, fmt(x.cut9)),
+          el('td', { class: 'tabular' }, x.sosin_reachable ? fmt(x.required_future_avg_sosin) : `${fmt(x.required_future_avg_sosin)} (어려움)`),
+          el('td', { class: 'tabular' }, x.reachable ? fmt(x.required_future_avg) : `${fmt(x.required_future_avg)} (어려움)`))))))),
+    el('p', { class: 'small', style: 'margin: 0' }, res.notes.join(' '))));
+}
+
+async function run() {
+  const keyword = $('kw').value.trim();
+  if (!keyword) { $('content').replaceChildren(el('p', { class: 'small' }, '희망 학과 키워드를 입력해 주세요.')); return; }
+  $('msg').hidden = true;
+  $('content').replaceChildren(spinner('남은 학기 시나리오를 계산하는 중입니다.'));
+  const [tu, tt] = ($('target').value || '|').split('|');
+  try {
+    const res = await api('/api/simulate', { subjects: [...base, ...plan], keyword, target_univ: tu || null, target_track: tt || null });
+    if (res.error) throw new Error(res.error);
+    if (!targets.length) {
+      targets = res.targets;
+      $('target').replaceChildren(el('option', { value: '' }, '가장 가까운 상위 목표 (자동)'),
+        ...targets.map((x) => el('option', { value: `${x.univ_name}|${x.track_name}` }, `${x.univ_name} ${x.track_name} (지금 ${x.current_label})`)));
+    }
+    render(res);
+  } catch (e) { $('content').replaceChildren(); $('msg').textContent = e.message; $('msg').hidden = false; }
+}
+function schedule() { clearTimeout(timer); timer = setTimeout(run, 250); }
+
+if (!base.some((x) => x.grade != null)) {
+  $('content').replaceChildren(el('div', { class: 'empty-state' }, el('p', {}, '먼저 성적을 입력해 주세요.'),
+    el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
+} else {
+  initPlan();
+  $('kw').value = profile.major || '';
+  $('kw').addEventListener('change', () => { targets = []; profile.major = $('kw').value.trim(); Store.save(profile); run(); });
+  $('target').addEventListener('change', run);
+  run();
+}
+</script>
+</body>
+</html>

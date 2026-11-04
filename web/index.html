@@ -65,7 +65,21 @@
         <p class="small" style="margin: 0">학생 이름·학교명은 받지 않습니다. 입력한 성적은 이 브라우저에만 저장됩니다.</p>
       </section>
       <a href="analysis.html" class="btn primary">분석하기</a>
-      <button type="button" class="btn" disabled title="프로필 저장(승인 후 저장)은 D1 작업에서 연결합니다">프로필 저장 (확인 후 저장) · 준비 중</button>
+      <button type="button" class="btn" id="save-profile">프로필 저장 (확인 후 저장)</button>
+      <dialog id="profile-dlg" style="border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: 420px">
+        <form method="dialog" id="profile-form" style="display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-size: 18px">프로필 저장 확인</h2>
+          <p class="small" style="margin: 0">아래 내용을 서버에 저장합니다. 학생 이름 대신 별칭을 써 주세요.</p>
+          <label class="lbl" for="alias">별칭</label>
+          <input id="alias" class="field" type="text" maxlength="20" placeholder="예: 첫째" required>
+          <ul id="profile-summary" class="small" style="margin: 0; padding-left: 18px"></ul>
+          <p class="error" id="profile-msg" hidden></p>
+          <div style="display: flex; gap: 8px; justify-content: flex-end">
+            <button type="button" class="btn" id="profile-cancel">취소</button>
+            <button type="submit" class="btn" style="background: var(--primary); color: #FFFFFF; border-color: var(--primary)" value="save">저장 승인</button>
+          </div>
+        </form>
+      </dialog>
     </aside>
   </div>
 </main>
@@ -155,6 +169,26 @@ $('csv').addEventListener('change', async (e) => {
     achievement: c[col('achievement')] || null,
   }));
   sem = profile.subjects[0]?.semester || '1-1'; persist(); render(); e.target.value = '';
+});
+// 프로필 저장: 확인 창에서 사용자가 승인해야만 서버에 저장한다 (HITL)
+$('save-profile').addEventListener('click', () => {
+  const subj = validSubjects(profile.subjects);
+  $('profile-summary').replaceChildren(
+    el('li', {}, `희망 학과: ${profile.major || '–'} · 계열: ${profile.field || '–'}`),
+    el('li', {}, `과목 성적 ${subj.length}개 (${SEMESTERS.filter((s) => subj.some((x) => x.semester === s)).join('·') || '없음'})`));
+  $('profile-msg').hidden = true;
+  $('profile-dlg').showModal();
+});
+$('profile-cancel').addEventListener('click', () => $('profile-dlg').close());
+$('profile-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api('/api/profile', { alias: $('alias').value.trim(), major: profile.major || '', field: profile.field || '', subjects: validSubjects(profile.subjects) });
+    if (!r.saved) throw new Error(r.message);
+    $('profile-dlg').close();
+    showError('');
+    $('msg').textContent = r.message; $('msg').hidden = false; $('msg').style.background = 'var(--primary-soft)'; $('msg').style.color = 'var(--primary-dark)';
+  } catch (err) { $('profile-msg').textContent = err.message; $('profile-msg').hidden = false; }
 });
 $('major').value = profile.major || '';
 $('field').value = profile.field || '';

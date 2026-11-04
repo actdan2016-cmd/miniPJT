@@ -109,6 +109,49 @@ def convert_5to9(avg5: float) -> dict:
     return {"avg5": avg5, "percentile": round(pct, 1), "grade9": round(to_grade9(pct), 2)}
 
 
+def grade9_to_avg5(g9: float) -> float:
+    """9등급 값(예: 컷)을 같은 누적 백분위의 5등급 평균으로 거꾸로 바꾼다 (convert_5to9의 역함수, 근사).
+
+    1등급보다 좋은 값이 필요하면 1.0 미만이 나온다(= 5등급 평균으로는 도달하기 어려움).
+    """
+    j = min(max(int(g9), 1), 8) - 1
+    pct = MID_PCT_9[j] + (g9 - (j + 1)) * (MID_PCT_9[j + 1] - MID_PCT_9[j])
+    if pct < MID_PCT_5[0]:
+        return round(1 - (MID_PCT_5[0] - pct) / (MID_PCT_5[1] - MID_PCT_5[0]), 2)
+    for i in range(len(MID_PCT_5) - 1):
+        lo, hi = MID_PCT_5[i], MID_PCT_5[i + 1]
+        if lo <= pct <= hi:
+            return round((i + 1) + (pct - lo) / (hi - lo), 2)
+    return 5.0
+
+
+def required_future_avg(total: float, credits: int, future_credits: int, target_avg5: float) -> float:
+    """지금까지 (등급×학점 합 total, 학점 credits)에서 남은 학점 future_credits로 누적 평균 target_avg5에 닿으려면
+    남은 학기 평균이 몇이어야 하는지. 1.0보다 작으면 남은 학기를 모두 1등급으로 받아도 닿지 않는다."""
+    return round((target_avg5 * (credits + future_credits) - total) / future_credits, 2)
+
+
+def projected_avg(total: float, credits: int, future_credits: int, future_avg: float) -> float:
+    """남은 학기를 평균 future_avg로 받을 때의 누적 평균"""
+    return round((total + future_avg * future_credits) / (credits + future_credits), 2)
+
+
+def group_effects(rows: list[dict]) -> list[dict]:
+    """교과군별 학점 비중과 '앞으로 그 교과군을 1등급 올릴 때 누적 평균이 내려가는 정도'(학점 비중 기준).
+
+    반환: 교과군별 {group, credits, share, avg, room}을 효과(share×여유) 큰 순으로. room = 지금 평균에서 1등급까지 남은 폭
+    """
+    graded = [r for r in rows if r.get("grade") is not None]
+    total = sum(r["credits"] for r in graded)
+    out = []
+    for g in sorted({r["group"] for r in graded}):
+        rs = [r for r in graded if r["group"] == g]
+        c = sum(r["credits"] for r in rs)
+        avg = sum(r["grade"] * r["credits"] for r in rs) / c
+        out.append({"group": g, "credits": c, "share": round(c / total, 3), "avg": round(avg, 2), "room": round(avg - 1, 2)})
+    return sorted(out, key=lambda x: (x["share"] * x["room"], x["share"]), reverse=True)
+
+
 def classify(g: float, c: float) -> dict:
     """환산 9등급(g)을 기준선 컷(c)과 비교해 안정·적정·소신·상향·격차 큼으로 나눈다.
 

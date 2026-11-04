@@ -154,7 +154,30 @@ function answerCard(res) {
     el('summary', { class: 'ctx-btn' }, `처리 과정 보기 (${res.trace.length}단계 · 개발자용)`),
     el('ol', { class: 'trace' }, res.trace.map((t) => el('li', {}, el('strong', {}, t.step),
       el('pre', {}, [typeof t.input === 'string' ? t.input : JSON.stringify(t.input), t.output ? '→ ' + t.output : ''].filter(Boolean).join('\n'))))));
-  return el('article', { class: 'a' }, markdown(res.answer), res.contexts.length ? ctxList : null, trace);
+  return el('article', { class: 'a' }, markdown(res.answer), res.pending_approval ? approvalBox(res) : null,
+    res.contexts.length ? ctxList : null, trace);
+}
+
+// 프로필 저장 승인(HITL): 승인 전에는 저장되지 않는다
+function approvalBox(res) {
+  const items = res.pending_approval.map((p) => {
+    const a = p.args || {};
+    const subj = (a.subjects || []).length;
+    return el('li', {}, `별칭 '${a.alias || ''}' · 희망 학과 ${a.major || '–'}${subj ? ` · 과목 성적 ${subj}개` : ''}`);
+  });
+  const box = el('div', { class: 'note', style: 'background: var(--primary-soft); color: var(--text)' },
+    el('strong', {}, '저장 승인 필요'), el('ul', { style: 'margin: 6px 0 10px; padding-left: 18px' }, items),
+    el('div', { style: 'display: flex; gap: 8px' },
+      el('button', { type: 'button', class: 'btn', style: 'background: var(--primary); color: #FFFFFF; border-color: var(--primary)', onClick: () => decide(true) }, '저장 승인'),
+      el('button', { type: 'button', class: 'btn', onClick: () => decide(false) }, '거절')));
+  async function decide(approve) {
+    box.replaceChildren(spinner(approve ? '저장하는 중입니다.' : '거절을 전달하는 중입니다.'));
+    try {
+      const next = await api('/query/resume', { thread_id: res.thread_id, approve });
+      box.replaceWith(answerCard(next));
+    } catch (e) { box.replaceChildren(el('p', { class: 'error' }, e.message)); }
+  }
+  return box;
 }
 
 async function send(question) {

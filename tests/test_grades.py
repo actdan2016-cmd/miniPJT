@@ -137,3 +137,33 @@ def test_q22_trend():
 ])
 def test_baseline_cut(ttype, c70, c50, cavg, expected):
     assert baseline_cut(ttype, c70, c50, cavg) == expected
+
+
+# ---------- What-if (C3) ----------
+from src.grades import grade9_to_avg5, group_effects, projected_avg, required_future_avg  # noqa: E402
+
+
+@pytest.mark.parametrize("avg5", [1.5, 2.2, 2.28, 2.4, 3.5])
+def test_grade9_to_avg5_is_inverse(avg5):
+    g9 = convert_5to9(avg5)["grade9"]
+    assert abs(grade9_to_avg5(g9) - avg5) <= 0.01
+
+
+def test_q23_target_suwon():
+    # 23번: 수원대 간호 교과우수 c=2.65 → 5등급 약 1.51, 22번 성적(105/46)에 남은 3학기(69학점)로는 1등급 미만이 필요
+    assert grade9_to_avg5(2.65) == 1.51
+    assert required_future_avg(105, 46, 69, 1.51) < 1.0
+    # 수원대 고교추천 c=3.0 → 5등급 약 1.71, 남은 학기 평균 약 1.33이면 적정 경계 ((1.71×115−105)÷69 = 1.328)
+    assert grade9_to_avg5(3.0) == 1.71
+    assert required_future_avg(105, 46, 69, 1.71) == 1.33
+
+
+def test_projected_avg():
+    assert projected_avg(105, 46, 69, 2.0) == 2.11
+
+
+def test_group_effects_order():
+    effects = group_effects(load_sample())
+    assert effects[0]["group"] in ("수학", "과학", "영어")   # 학점 비중이 같으면 지금 등급이 낮은(숫자 큰) 교과가 앞
+    sci = next(e for e in effects if e["group"] == "과학")
+    assert sci["avg"] == 3.0 and sci["credits"] == 8

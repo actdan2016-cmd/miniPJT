@@ -8,7 +8,9 @@
   - 거절 신호: 데이터에 없는 negative 문항(정답 없음)은 '확인할 수 없다' 류의 표현이 있어야 PASS
   - 의미 판정: llm_judge가 기대 특성 충족·금지 항목 없음으로 판정해야 PASS
 
-실행: python -m evaluation.run_eval --round 1 [--ids 1,3,17] [--workers 4]
+실행: python -m evaluation.run_eval --round 1 [--ids 1,3,17] [--workers 2] [--ragas]
+  --ragas: evaluation/ragas_references.csv의 문항(4·10·12·24·26)에 RAGAS 4개 지표(faithfulness·answer_relevancy·
+           context_recall·context_precision)를 함께 계산한다 (평가 LLM은 judge와 같은 모델, 임베딩은 Titan v2)
 """
 import argparse
 import csv
@@ -30,6 +32,7 @@ from src.replies import REFUSAL_SIGNAL  # noqa: E402
 load_dotenv()
 
 QUERIES = ROOT / "evaluation" / "test_queries.csv"
+REFERENCES = ROOT / "evaluation" / "ragas_references.csv"
 
 # 거절(차단) 신호: 입력 가드레일 고정 문구(replies.py)를 기준으로 한다 (교안 BLOCK_SIGNALS 방식)
 BLOCK_SIGNALS = [REFUSAL_SIGNAL]
@@ -136,6 +139,42 @@ def run_case(row: dict, thread_id: str) -> dict:
             "checks": checks, "passed": all(c["passed"] for c in checks), "judge": j, "seconds": time.time() - t}
 
 
+# ---------- RAGAS (C5) ----------
+def ragas_scores(results: list[dict]) -> dict | None:
+    """ragas_references.csv에 정답이 있는 문항만 골라 RAGAS 지표 4개를 계산한다.
+
+    ragas 0.4.3은 langchain-community에서 없어진 vertexai 모듈을 import하므로, 쓰지 않는 그 모듈 자리만 빈 모듈로 채운다.
+    """
+    import types
+    import warnings
+    warnings.filterwarnings("ignore")
+    for name, attr in (("langchain_community.chat_models.vertexai", "ChatVertexAI"), ("langchain_community.llms.vertexai", "VertexAI")):
+        if name not in sys.modules:
+            m = types.ModuleType(name); setattr(m, attr, type(attr, (), {})); sys.modules[name] = m
+    from langchain_aws import BedrockEmbeddings
+    from ragas import EvaluationDataset, evaluate
+    from ragas.embeddings import LangchainEmbeddingsWrapper
+    from ragas.llms import LangchainLLMWrapper
+    from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
+
+    refs = {r["id"]: r["reference"] for r in csv.DictReader(open(REFERENCES, encoding="utf-8-sig"))}
+    rows = [r for r in results if r["row"]["id"] in refs and r.get("answer")]
+    if not rows:
+        return None
+    data = EvaluationDataset.from_list([{"user_input": r["row"]["input"], "response": r["answer"],
+                                         "retrieved_contexts": [c["text"] for c in r["contexts"]] or ["(근거 없음)"],
+                                         "reference": refs[r["row"]["id"]]} for r in rows])
+    llm = LangchainLLMWrapper(ChatBedrockConverse(model=JUDGE_MODEL, region_name="us-east-1", temperature=0))
+    emb = LangchainEmbeddingsWrapper(BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0", region_name="us-east-1"))
+    res = evaluate(data, metrics=[faithfulness, answer_relevancy, context_recall, context_precision], llm=llm, embeddings=emb,
+                   show_progress=False)
+    df = res.to_pandas()
+    per_item = {rows[i]["row"]["id"]: {m: round(float(df.iloc[i][m]), 3) for m in
+                                       ("faithfulness", "answer_relevancy", "context_recall", "context_precision")} for i in range(len(rows))}
+    mean = {m: round(sum(v[m] for v in per_item.values()) / len(per_item), 3) for m in next(iter(per_item.values()))}
+    return {"mean": mean, "items": per_item}
+
+
 def plan_groups(rows: list[dict]) -> list[list[dict]]:
     """note의 'N번 선행'을 읽어 이어지는 문항을 같은 그룹(같은 대화)으로 묶는다."""
     by_id = {r["id"]: r for r in rows}
@@ -157,7 +196,7 @@ def plan_groups(rows: list[dict]) -> list[list[dict]]:
     return groups
 
 
-def write_report(path: Path, round_no: int, results: list[dict], minutes: float) -> None:
+def write_report(path: Path, round_no: int, results: list[dict], minutes: float, ragas: dict | None = None) -> None:
     """채점 결과를 마크다운 리포트로 쓴다."""
     results = sorted(results, key=lambda r: int(r["row"]["id"]))
     n, p = len(results), sum(r["passed"] for r in results)
@@ -184,6 +223,12 @@ def write_report(path: Path, round_no: int, results: list[dict], minutes: float)
     L += [f"| {k} | {v[0]}/{v[1]} |" for k, v in cats.items()]
     L += ["", "## 검사별", "| 검사 | 통과 |", "|---|---|"]
     L += [f"| {k} | {v[0]}/{v[1]} |" for k, v in check_stats.items()]
+    if ragas:
+        targets = {"faithfulness": 0.85, "answer_relevancy": 0.80, "context_recall": 0.75, "context_precision": 0.70}
+        L += ["", "## RAGAS (정답 있는 문항 " + ", ".join(ragas["items"]) + ")", "| 지표 | 평균 | 목표 (SERVICE.md §5) |", "|---|---|---|"]
+        L += [f"| {k} | {v:.3f} | ≥ {targets[k]:.2f} {'✔' if v >= targets[k] else '✘'} |" for k, v in ragas["mean"].items()]
+        L += ["", "| id | faithfulness | answer_relevancy | context_recall | context_precision |", "|---|---|---|---|---|"]
+        L += [f"| {i} | " + " | ".join(f"{v[m]:.3f}" for m in targets) + " |" for i, v in ragas["items"].items()]
     L += ["", "## 문항별", "| id | 유형 | 결과 | 검사 | 초 |", "|---|---|---|---|---|"]
     for r in results:
         detail = "<br>".join(f"{'✔' if c['passed'] else '✘'} {c['name']}: {c['detail']}" for c in r["checks"]) or r.get("error", "")
@@ -201,6 +246,7 @@ def main():
     ap.add_argument("--round", type=int, default=1)
     ap.add_argument("--ids", default="", help="일부 문항만: 1,3,17 (선행 문항은 자동 포함)")
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--ragas", action="store_true", help="RAGAS 지표도 계산")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -229,7 +275,14 @@ def main():
     print(f"\n===== 결과: {p}/{len(results)} 통과 ({minutes:.1f}분) =====")
     name = f"round{args.round}_report.md" if not args.ids else f"round{args.round}_partial.md"
     out = ROOT / "evaluation" / name
-    write_report(out, args.round, results, minutes)
+    ragas = None
+    if args.ragas:
+        try:
+            ragas = ragas_scores(results)
+            print("RAGAS:", ragas["mean"] if ragas else "대상 문항 없음")
+        except Exception as e:
+            print(f"RAGAS 계산 실패: {type(e).__name__}: {e}")
+    write_report(out, args.round, results, minutes, ragas)
     print(f"리포트: {out}")
 
 
