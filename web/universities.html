@@ -23,7 +23,8 @@
 .tag { align-self: flex-start; padding: 4px 8px; background: var(--warn-bg); color: var(--warn-text); border-radius: 6px; font-size: 12px; font-weight: 600; }
 .empty-tier { margin: 0; padding: 16px; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--muted); font-size: 14px; }
 .board { display: flex; flex-direction: column; gap: 16px; }
-.board-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.board-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.board-title .seg { margin-left: auto; }
 .board-title h2 { margin: 0; font-size: 22px; }
 table.list { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
 table.list th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 600; padding: 8px; }
@@ -79,8 +80,9 @@ const TIERS = [
   { name: '적정', rule: '컷 이내 (0.5 여유까지)' }, { name: '안정', rule: '컷보다 0.5 넘게 유리' },
 ];
 const TYPES = [['전체', '전체'], ['4년제', '4년제'], ['전문대', '전문대']];
+const REGIONS = [['전체', '전체'], ['수도권', '수도권'], ['수도권외', '수도권 외']];   // 지역 퀵필터 (기본 전체)
 let profile = Store.load() || emptyProfile();
-let result = null, avg5 = null, univType = '전체';
+let result = null, avg5 = null, univType = '전체', region = '전체';
 
 function gapText(g) { return g === null || g === undefined ? '' : (g > 0 ? `+${g.toFixed(2)}` : g.toFixed(2)); }
 function cutLabel(x) { return x.basis === '합격자 평균' ? `${x.year} 합격자 평균(9등급)` : `${x.year} ${x.basis}(9등급)`; }
@@ -120,7 +122,9 @@ function board(title, sub, items) {
   const gap = items.filter((x) => x.label === '격차 큼');
   const hidden = items.filter((x) => x.label === '입결 미공개');
   const ref = items.filter((x) => x.label === '종합 참고치');
-  const parts = [el('div', { class: 'board-title' }, el('h2', {}, title), el('span', { class: 'small' }, sub)),
+  const regionSeg = el('div', { class: 'seg', role: 'group', 'aria-label': '지역' }, REGIONS.map(([v, label]) =>
+    el('button', { type: 'button', 'aria-pressed': String(region === v), onClick: () => { region = v; render(); } }, label)));
+  const parts = [el('div', { class: 'board-title' }, el('h2', {}, title), el('span', { class: 'small' }, sub), regionSeg),
     el('div', { class: 'tiers' }, tiers)];
   if (gap.length) parts.push(el('section', { class: 'card' },
     el('h2', {}, `격차 큼 ${gap.length} · 컷까지 1등급 넘게 차이`),
@@ -144,11 +148,13 @@ function renderTypes() {
 
 function render() {
   if (!result) return;
-  const keep = (x) => univType === '전체' || x.univ_type === univType;
+  const keep = (x) => (univType === '전체' || x.univ_type === univType)
+    && (region === '전체' || (region === '수도권' ? x.is_metro : !x.is_metro));
   const items = result.results.filter(keep);
   const units = [...new Set(result.results.map((x) => x.unit_name))];
   $('units').replaceChildren(...(units.length ? units.map((u) => el('span', { class: 'chip' }, u)) : [el('span', { class: 'small' }, '찾은 모집단위가 없습니다.')]));
-  $('boards').replaceChildren(board('지원 가능성 판정', '수도권·비수도권 함께 · 카드마다 지역 표시', items));
+  const sub = { 전체: '수도권·비수도권 함께 · 카드마다 지역 표시', 수도권: '서울·경기·인천만', 수도권외: '서울·경기·인천 밖 지역만' }[region];
+  $('boards').replaceChildren(board('지원 가능성 판정', sub, items));
   $('notes').textContent = [result.premise, ...result.notes].join(' ');
 }
 
