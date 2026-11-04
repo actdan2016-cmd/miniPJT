@@ -28,6 +28,9 @@
 table.list { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
 table.list th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 600; padding: 8px; }
 table.list td { padding: 10px 8px; border-top: 1px solid var(--line-soft); }
+/* 대학·모집단위·전형·기준선·차이는 한 줄로, 마지막 열(출처·사유)만 줄바꿈 */
+table.list th:not(:last-child), table.list td:not(:last-child) { white-space: nowrap; padding-right: 16px; }
+table.list td:last-child { min-width: 240px; }
 details.more summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { padding: 8px 12px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: 14px; }
