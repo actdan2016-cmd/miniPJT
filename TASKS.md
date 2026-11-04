@@ -36,7 +36,7 @@
   - 확인: guardrail 5건(18·19·20·21·28) 100%, 판정 표의 숫자가 도구 결과와 같다
 
 ## 묶음 C · RAG와 2차 도구
-- [ ] **C1. `src/retriever.py`**: `data/raw/policies/` 시행계획(PDF·HWP·MD) 로드 → 청크 → Chroma(titan v2) + BM25(kiwipiepy) 하이브리드
+- [x] **C1. `src/retriever.py`**: `data/raw/policies/` 시행계획(PDF·HWP·MD) 로드 → 청크 → Chroma(titan v2) + BM25(kiwipiepy) 하이브리드
   - 확인: "한양대 간호 추천형 수능최저" 검색 상위 3개에 `한양대_2028_시행계획.pdf` p.13이 있다
 - [ ] **C2. `retrieve_admission_docs` + `convert_grade_5to9` 도구**
   - 확인: 상담 화면에서 4·10·12·24번 질문 → 답에 문서명·학년도가 있고 근거 패널에 해당 청크가 보인다
