@@ -123,7 +123,7 @@ function conversionCard(res) {
     el('dl', { class: 'conv' }, Object.entries(res.cumulative).filter(([, v]) => v.grade9).flatMap(([scope, v]) => [
       el('dt', {}, `${scope} ${fmt(v.avg)}`), el('dd', {}, `누적 약 ${Number(v.grade9.percentile).toFixed(1)}% → 9등급 약 ${fmt(v.grade9.grade9)}`)])),
     el('p', { class: 'note', style: 'margin-top: 16px' }, '평균 등급은 백분위가 아니어서 정보 손실이 있습니다. 학생부종합처럼 정성평가 전형은 환산만으로 판단하기 어렵습니다.'),
-    el('span', { class: 'small', style: 'display: inline-flex; min-height: 44px; align-items: center; margin-top: 12px' }, '지원 가능 대학 화면은 다음 단계(A7)에서 연결됩니다.'));
+    el('a', { href: 'universities.html', style: 'display: inline-flex; min-height: 44px; align-items: center; margin-top: 12px; font-weight: 600; font-size: 15px' }, '이 성적으로 지원 가능 대학 보기 →'));
 }
 
 async function main() {

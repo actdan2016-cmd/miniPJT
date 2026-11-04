@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시나침반 · 지원 가능 대학</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<style>
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; }
+.tier { display: flex; flex-direction: column; gap: 12px; }
+.tier-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 12px 14px; border-radius: 10px; }
+.tier-head b { font-size: 17px; } .tier-head span { font-size: 13px; }
+.t-상향 { background: #DCE5F9; color: #142B6B; } .t-소신 { background: #AFC3F0; color: #142B6B; }
+.t-적정 { background: #2650C0; color: #FFFFFF; } .t-안정 { background: #142B6B; color: #FFFFFF; }
+.uni { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.uni h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.uni p { margin: 0; }
+.badge { padding: 3px 8px; border: 1px solid var(--faint); border-radius: 6px; font-size: 12px; color: var(--text-2); }
+.cutbox { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 12px; background: var(--bg); border-radius: 8px; }
+.tag { align-self: flex-start; padding: 4px 8px; background: var(--warn-bg); color: var(--warn-text); border-radius: 6px; font-size: 12px; font-weight: 600; }
+.empty-tier { margin: 0; padding: 16px; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--muted); font-size: 14px; }
+.board { display: flex; flex-direction: column; gap: 16px; }
+.board-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.board-title h2 { margin: 0; font-size: 22px; }
+table.list { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+table.list th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 600; padding: 8px; }
+table.list td { padding: 10px 8px; border-top: 1px solid var(--line-soft); }
+details.more summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 8px 12px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: 14px; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { min-height: 44px; padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; background: var(--surface); border: 1px solid var(--line-strong); }
+.seg button[aria-pressed="true"] { background: var(--text); color: #FFFFFF; border-color: var(--text); }
+</style>
+</head>
+<body>
+<div id="site-top"></div>
+<main class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>지원 가능 대학</h1>
+      <p class="lead" id="lead">성적을 불러오는 중입니다.</p>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--text-2)">
+      <span style="padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px">입결 2026학년도</span>
+      <span style="padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px">전형 2028 기준(2029 참고)</span>
+    </div>
+  </div>
+
+  <form class="card" id="search" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px">
+      <label class="lbl" for="kw" style="font-size: 13px">학과 키워드</label>
+      <input id="kw" class="field" type="text" placeholder="예: 간호, 컴퓨터, AI" required>
+    </div>
+    <button type="submit" class="btn" style="font-weight: 600">찾기</button>
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 2 1 320px">
+      <span class="lbl" style="font-size: 13px">찾은 모집단위</span>
+      <div class="chips" id="units"><span class="small">–</span></div>
+    </div>
+    <div class="seg" role="group" aria-label="학교 유형" id="types"></div>
+  </form>
+  <p class="error" id="msg" hidden></p>
+  <div id="boards" style="display: flex; flex-direction: column; gap: 40px"></div>
+  <p class="note" style="background: var(--surface); border: 1px solid var(--line); font-size: 14px">상향·소신·적정·안정은 과거 입결 대비 합격 가능성 분류일 뿐, 학교의 가치를 뜻하지 않습니다. 4년제와 전문대는 같은 기준으로 함께 보여 줍니다. 학생부종합은 정성평가라 판정하지 않고 합격자 내신만 참고로 보여 줍니다.</p>
+  <p class="small" id="notes"></p>
+</main>
+
+<script>
+renderHeader('universities.html');
+const $ = (id) => document.getElementById(id);
+const TIERS = [
+  { name: '상향', rule: '컷보다 0.5~1.0 불리' }, { name: '소신', rule: '컷보다 0~0.5 불리' },
+  { name: '적정', rule: '컷 이내 (0.5 여유까지)' }, { name: '안정', rule: '컷보다 0.5 넘게 유리' },
+];
+const TYPES = [['전체', '전체'], ['4년제', '4년제'], ['전문대', '전문대']];
+let profile = Store.load() || emptyProfile();
+let result = null, avg5 = null, univType = '전체';
+
+function gapText(g) { return g === null || g === undefined ? '' : (g > 0 ? `+${g.toFixed(2)}` : g.toFixed(2)); }
+function cutLabel(x) { return x.basis === '합격자 평균' ? `${x.year} 합격자 평균(9등급)` : `${x.year} ${x.basis}(9등급)`; }
+function shortTrack(name) { return name.replace(/^학생부(교과|종합)\(?/, '').replace(/\)$/, '') || name; }
+
+function card(x) {
+  const tags = [];
+  if (x.renamed_in_2028) tags.push(`2028 전형 변경 → ${x.tracks_2028.join(', ')}`);
+  if (x.basis === '50% 컷') tags.push('70% 컷 미공개 · 50% 컷 기준');
+  return el('article', { class: 'uni' },
+    el('div', { style: 'display: flex; justify-content: space-between; align-items: center; gap: 8px' },
+      el('span', { class: 'badge' }, x.univ_type), el('span', { class: 'small' }, x.region)),
+    el('h3', {}, x.univ_name),
+    el('p', { style: 'font-size: 15px' }, x.unit_name),
+    el('p', { class: 'small' }, `${x.track_type} · ${shortTrack(x.track_name)}`),
+    el('div', { class: 'cutbox' }, el('span', { class: 'small' }, cutLabel(x)),
+      el('span', { class: 'tabular', style: 'font-size: 16px; font-weight: 600' }, fmt(x.cut),
+        el('span', { class: 'small', style: 'margin-left: 6px' }, `(${gapText(x.gap)})`))),
+    x.cut_min !== null && x.cut_min !== undefined ? el('p', { class: 'small' }, `합격자 최저 ${fmt(x.cut_min)}`) : null,
+    tags.map((t) => el('span', { class: 'tag' }, t)),
+    el('p', { class: 'small' }, `출처: ${x.source_doc}`));
+}
+
+function listTable(rows, cols) {
+  return el('div', { class: 'table-scroll' }, el('table', { class: 'list' },
+    el('thead', {}, el('tr', {}, cols.map((c) => el('th', { scope: 'col' }, c[0])))),
+    el('tbody', {}, rows.map((x) => el('tr', {}, cols.map((c) => el('td', { class: 'tabular' }, c[1](x))))))));
+}
+
+function board(title, sub, items) {
+  const tiers = TIERS.map((t) => {
+    const cards = items.filter((x) => x.label === t.name);
+    return el('section', { class: 'tier', 'aria-label': t.name },
+      el('div', { class: `tier-head t-${t.name}` }, el('b', {}, `${t.name} ${cards.length}`), el('span', {}, t.rule)),
+      cards.length ? cards.map(card) : el('p', { class: 'empty-tier' }, '조건에 맞는 전형이 없습니다.'));
+  });
+  const gap = items.filter((x) => x.label === '격차 큼');
+  const hidden = items.filter((x) => x.label === '입결 미공개');
+  const ref = items.filter((x) => x.label === '종합 참고치');
+  const parts = [el('div', { class: 'board-title' }, el('h2', {}, title), el('span', { class: 'small' }, sub)),
+    el('div', { class: 'tiers' }, tiers)];
+  if (gap.length) parts.push(el('section', { class: 'card' },
+    el('h2', {}, `격차 큼 ${gap.length} · 컷까지 1등급 넘게 차이`),
+    el('p', { class: 'small', style: 'margin: -4px 0 12px' }, '숨기지 않고 보여 드립니다. 보강 과목(What-if) 화면에서 컷까지 줄이는 방법을 볼 수 있습니다.'),
+    listTable(gap, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
+      ['기준선', (x) => `${fmt(x.cut)} (${x.basis})`], ['컷까지', (x) => gapText(x.gap)], ['출처', (x) => x.source_doc]])));
+  if (hidden.length) parts.push(el('section', { class: 'card' }, el('h2', {}, `입결 미공개 ${hidden.length}`),
+    listTable(hidden, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)], ['사유', (x) => x.reason]])));
+  if (ref.length) parts.push(el('details', { class: 'card more' },
+    el('summary', {}, `학생부종합 참고치 ${ref.length} · 판정 없음`),
+    el('p', { class: 'small', style: 'margin: 0 0 12px' }, '정성평가 전형이라 등급만으로 판단하지 않습니다. 합격자 내신(9등급)만 참고로 보여 드립니다.'),
+    listTable(ref, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
+      ['합격자 내신', (x) => `${fmt(x.cut)}${x.basis ? ` (${x.basis})` : ''}`], ['출처', (x) => x.source_doc]])));
+  return el('div', { class: 'board' }, parts);
+}
+
+function renderTypes() {
+  $('types').replaceChildren(...TYPES.map(([v, label]) => el('button', { type: 'button', 'aria-pressed': String(univType === v),
+    onClick: () => { univType = v; renderTypes(); render(); } }, label)));
+}
+
+function render() {
+  if (!result) return;
+  const keep = (x) => univType === '전체' || x.univ_type === univType;
+  const metro = result.metro.filter(keep), other = result.non_metro_reference.filter(keep);
+  const units = [...new Set([...result.metro, ...result.non_metro_reference].map((x) => x.unit_name))];
+  $('units').replaceChildren(...(units.length ? units.map((u) => el('span', { class: 'chip' }, u)) : [el('span', { class: 'small' }, '찾은 모집단위가 없습니다.')]));
+  $('boards').replaceChildren(
+    board('수도권', '서울·경기·인천', metro),
+    board('수도권 외 참고', '기본 목록 밖 지역 · 참고용', other));
+  $('notes').textContent = [result.premise, ...result.notes].join(' ');
+}
+
+async function search(keyword) {
+  $('msg').hidden = true;
+  try {
+    result = await api('/api/predict', { avg5, keyword });
+    const c = result.conversion;
+    $('lead').replaceChildren('내 환산 등급 ', el('strong', { class: 'tabular', style: 'color: var(--primary)' }, `약 ${fmt(c.grade9)}`),
+      ` (5등급 ${fmt(c.avg5)}, 누적 약 ${Number(c.percentile).toFixed(1)}%) · 2026학년도 입결 기준선과 비교`);
+    profile.major = keyword; Store.save(profile);
+    render();
+  } catch (e) { $('msg').textContent = e.message; $('msg').hidden = false; }
+}
+
+async function main() {
+  renderTypes();
+  const subjects = validSubjects(profile.subjects);
+  if (!subjects.some((x) => x.grade != null)) {
+    $('lead').textContent = '';
+    $('search').hidden = true;
+    $('boards').replaceChildren(el('div', { class: 'empty-state' }, el('p', {}, '먼저 성적을 입력해 주세요.'),
+      el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
+    return;
+  }
+  try {
+    const g = await api('/api/grades/analyze', { subjects });
+    avg5 = g.cumulative['전과목'].avg;
+  } catch (e) { $('msg').textContent = e.message; $('msg').hidden = false; return; }
+  $('kw').value = profile.major || '';
+  if (profile.major) search(profile.major);
+  else $('lead').textContent = `5등급 누적 ${fmt(avg5)} · 희망 학과 키워드를 넣고 [찾기]를 눌러 주세요.`;
+}
+$('search').addEventListener('submit', (e) => { e.preventDefault(); const k = $('kw').value.trim(); if (k) search(k); });
+main();
+</script>
+</body>
+</html>
