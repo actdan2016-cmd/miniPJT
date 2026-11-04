@@ -60,13 +60,26 @@ def is_metro(univ_id: str) -> bool:
     return universities()[univ_id]["is_metro"]
 
 
+def _program_matches(query: str, p: dict) -> bool:
+    """검색어가 모집단위에 맞는지 본다.
+
+    1) 검색어가 학과명·모집단위명·키워드 안에 있으면 맞음 ('컴퓨터' → 컴퓨터공학과)
+    2) 검색어 안에 키워드가 들어 있어도 맞음 ('컴퓨터공학' ⊃ 컴퓨터, '간호학과' ⊃ 간호).
+       단, '보건'·'의료'처럼 짧고 넓은 단어로 '보건행정'이 간호에 잡히지 않도록 대표 키워드(첫 번째)이거나 3글자 이상일 때만
+    """
+    q = query.replace(" ", "").lower()
+    keywords = [k for k in (p["keywords"] or "").split(";") if k]
+    if any(q in w.replace(" ", "").lower() for w in [p["dept_name"], p["unit_name"], *keywords] if w):
+        return True
+    return any(k.lower() in q for i, k in enumerate(keywords) if i == 0 or len(k) >= 3)
+
+
 def find_programs(keyword: str, univ_type: str | None = None) -> list[dict]:
-    """학과 키워드('간호', '컴퓨터', 'AI')로 모집단위를 찾는다. univ_type: '4년제'·'전문대'로 거른다."""
+    """학과 키워드('간호', '컴퓨터공학', 'AI')로 모집단위를 찾는다. univ_type: '4년제'·'전문대'로 거른다."""
     unis = universities()
     out = []
     for p in load("programs"):
-        words = [p["dept_name"], p["unit_name"], *(p["keywords"] or "").split(";")]
-        if not any(keyword.lower() in w.lower() for w in words if w):
+        if not _program_matches(keyword, p):
             continue
         u = unis[p["univ_id"]]
         if univ_type and u["univ_type"] != univ_type:
