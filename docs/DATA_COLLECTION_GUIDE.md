@@ -125,7 +125,7 @@ PDF를 보며 `admission_plans.csv` 를 채웁니다. 꼭 볼 항목:
 
 | 대학 | 위치 | 비고 |
 |---|---|---|
-| 가천 | admission.gachon.ac.kr 수시 resultView BOARD_IDX=30155, 정시 32175 | 엑셀. 어디가는 교과·정시가 미제출 |
+| 가천 | admission.gachon.ac.kr 수시 resultView BOARD_IDX=30155, 정시 32175 | 엑셀. 어디가는 교과·정시가 미제출 → 2026 수시 엑셀(`data/raw/results/가천대_2026_수시입결.xlsx`)로 교과 컷 보완 (2026-11-04). 지역균형은 일반선택 기준(70% 2.92)을 기준선으로 쓰고 통합 산출값(2.32)은 note에 남김. 산출 방식 근거: `data/raw/policies/가천대_2026_기본계획.pdf` PDF 6~7쪽. 정시 엑셀은 미수집 |
 | 아주 | www.iajou.ac.kr/rate/ | 3개년 PDF, 간호대학 p.36 |
 | 을지 | admission.eulji.ac.kr menuno=7353(수시)·7354(정시) | PDF |
 | 수원 | ipsi.suwon.ac.kr/board/susi_result/read/5517, 정시 pre_result/read/5503 | |
