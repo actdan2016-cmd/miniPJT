@@ -6,6 +6,7 @@
 - web/ 의 화면 파일을 같은 서버에서 띄운다
 """
 import json
+import time
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from src import data_store as ds
 from src.agent import ask, build_agent, open_checkpointer
+from src.middleware import mask_pii
 from src.tools import GpaInput, calc_school_gpa, classify_chances
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
@@ -88,11 +90,20 @@ def _tool_contexts(name: str, result: dict) -> list[dict]:
 
 
 def _contexts_and_trace(question: str, messages: list, answer: str) -> tuple[list[dict], list[dict]]:
-    """이번 턴 메시지에서 근거(contexts)와 단계 기록(trace)을 만든다."""
-    contexts, trace = [], [{"step": "question", "input": question, "output": ""}]
+    """이번 턴 메시지에서 근거(contexts)와 단계 기록(trace)을 만든다. trace에는 개인정보를 가린 질문만 남긴다."""
+    masked_q, pii_kinds = mask_pii(question)
+    contexts, trace = [], [{"step": "question", "input": masked_q, "output": ""}]
+    if pii_kinds:
+        trace.append({"step": "pii_mask", "input": pii_kinds, "output": "개인정보를 가린 뒤 모델에 전달"})
     calls = {}
     for m in messages:
         if isinstance(m, AIMessage):
+            if m.name != "input_guard":
+                usage = m.usage_metadata or {}
+                decision = [c["name"] for c in m.tool_calls] if m.tool_calls else "최종 답변"
+                trace.append({"step": "model_call", "input": {"model": (m.response_metadata or {}).get("model_name"),
+                                                              "tokens": usage.get("total_tokens")},
+                              "output": decision})
             for c in m.tool_calls or []:
                 calls[c["id"]] = c
                 trace.append({"step": f"tool_call:{c['name']}", "input": c["args"], "output": ""})
@@ -150,8 +161,10 @@ def predict(req: PredictRequest) -> dict:
 def query(req: QueryRequest) -> dict:
     """상담 챗 (과제 표준 규약) → {"answer", "contexts": [{"doc_id","text"}], "trace": [{"step","input","output"}]}"""
     thread_id = req.thread_id or uuid.uuid4().hex
+    start = time.time()
     out = ask(_agent(), req.question, thread_id)
     contexts, trace = _contexts_and_trace(req.question, out["messages"], out["answer"])
+    trace.append({"step": "total", "input": {"thread_id": thread_id}, "output": f"{time.time() - start:.1f}초"})
     return {"answer": out["answer"], "contexts": contexts, "trace": trace, "thread_id": thread_id}
 
 

@@ -16,7 +16,7 @@ from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from src.middleware import InputRuleMiddleware
+from src.middleware import InputRuleMiddleware, PiiMaskingMiddleware, mask_pii
 from src.tools import calc_school_gpa, classify_chances, lookup_admission_results
 
 load_dotenv()
@@ -74,22 +74,29 @@ def open_checkpointer(path: Path = CHECKPOINT_DB) -> SqliteSaver:
 def build_agent(checkpointer=None):
     """입시나침반 에이전트를 조립한다.
 
-    미들웨어 순서(바깥 → 안): 입력 규칙 차단 → 모델 대체. 차단되면 모델(대체 모델 포함)을 아예 부르지 않는다.
+    미들웨어 순서: 개인정보 마스킹(before_model, 기록에도 원문을 남기지 않음) → 입력 규칙 차단 → 모델 대체.
+    차단되면 모델(대체 모델 포함)을 아예 부르지 않는다.
     """
     return create_agent(
         model=build_llm(PRIMARY_MODEL),
         tools=TOOLS,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
-        middleware=[InputRuleMiddleware(), ModelFallbackMiddleware(*[build_llm(m) for m in FALLBACK_MODELS])],
+        middleware=[PiiMaskingMiddleware(), InputRuleMiddleware(),
+                    ModelFallbackMiddleware(*[build_llm(m) for m in FALLBACK_MODELS])],
     )
 
 
 def ask(agent, question: str, thread_id: str) -> dict:
-    """질문 하나를 보내고 최종 답변과 이번 턴의 메시지들을 돌려준다."""
+    """질문 하나를 보내고 최종 답변과 이번 턴의 메시지들을 돌려준다.
+
+    개인정보는 그래프에 넣기 전에 먼저 가린다. 체크포인터는 첫 입력을 기록 이력에 그대로 저장하므로,
+    미들웨어(PiiMaskingMiddleware)만으로는 이력에 원문이 남는다. 미들웨어는 다른 경로로 들어온 입력에 대한 2차 방어다.
+    """
     config = {"configurable": {"thread_id": thread_id}}
     before = len(agent.get_state(config).values.get("messages", [])) if agent.checkpointer else 0
-    result = agent.invoke({"messages": [HumanMessage(question)]}, config=config)
+    masked, _ = mask_pii(question)
+    result = agent.invoke({"messages": [HumanMessage(masked)]}, config=config)
     messages = result["messages"][before:]
     return {"answer": get_text(result["messages"][-1]), "messages": messages}
 

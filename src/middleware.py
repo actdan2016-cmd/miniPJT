@@ -1,5 +1,8 @@
 """middleware.py - 에이전트 미들웨어
 
+PiiMaskingMiddleware: 모델 호출 전에 최근 사용자 메시지의 개인정보(이름·학교명·반·연락처)를 가린다 (교안 day5 MaskingMiddleware 방식).
+  체크포인터는 그래프에 처음 들어온 입력을 이력에 그대로 저장하므로, 기록에 원문을 남기지 않으려면
+  입구(agent.ask)에서 mask_pii를 먼저 적용한다. 이 미들웨어는 그 밖의 경로로 들어온 입력에 대한 2차 방어다.
 InputRuleMiddleware: 위험 요청을 규칙(정규식)으로 먼저 걸러 모델 호출 없이 고정 문구로 답한다 (교안 day5 InputGuardrailMiddleware 방식).
   - guarantee     합격 보장 문구 작성 요청 (평가 18)
   - other_student 다른 학생 성적 조회·비교 (평가 19)
@@ -54,6 +57,47 @@ def _text(message) -> str:
     if isinstance(content, list):
         return "".join(b.get("text", "") for b in content if isinstance(b, dict))
     return content or ""
+
+
+# ---------- 개인정보 마스킹 ----------
+# 성씨만 보고 이름을 추측하면 '정보는', '성적이야' 같은 일반 단어까지 가리므로, 이름은 단서가 있을 때만 가린다
+PII_PATTERNS = [
+    ("연락처", re.compile(r"01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}")),
+    ("이메일", re.compile(r"[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}")),
+    ("주민번호", re.compile(r"\d{6}-?[1-4]\d{6}")),
+    ("학교명", re.compile(r"[가-힣A-Za-zO○]{1,12}(여자고등학교|고등학교|중학교|초등학교|고교|여고|외고|과학고|국제고)")),
+    ("학교명", re.compile(r"[가-힣A-Za-z]{0,8}(OO|○○)[가-힣]{0,2}고")),
+    ("학교명", re.compile(r"[가-힣]{2,8}고(?= ?[1-3] ?학년)")),
+    ("반", re.compile(r"(?<=학년 )\d{1,2} ?반|(?<=학년)\d{1,2} ?반")),
+]
+NAME_CUES = re.compile(r"(이름은|이름이|이름:|이름 :|성함은|성함이)\s*([가-힣]{2,4}?)(?=이고|이야|이에요|입니다|이며|[,.\s]|$)")
+
+
+def mask_pii(text: str) -> tuple[str, list[str]]:
+    """개인정보를 [이름]·[학교명]·[반]·[연락처] 같은 자리표시로 바꾼다. 반환: (가린 문장, 가린 종류 목록)"""
+    kinds = []
+    for m in NAME_CUES.finditer(text):
+        name = m.group(2)
+        text = text.replace(name, "[이름]")
+        kinds.append("이름")
+    for kind, pattern in PII_PATTERNS:
+        text, n = pattern.subn(f"[{kind}]", text)
+        if n:
+            kinds.append(kind)
+    return text, sorted(set(kinds))
+
+
+class PiiMaskingMiddleware(AgentMiddleware):
+    """모델 호출 전에 최근 사용자 메시지의 개인정보를 가리고, 같은 id로 바꿔 넣어 기록에도 원문을 남기지 않는다."""
+
+    def before_model(self, state, runtime):
+        last = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
+        if last is None:
+            return None
+        masked, kinds = mask_pii(_text(last))
+        if not kinds:
+            return None
+        return {"messages": [HumanMessage(content=masked, id=last.id)]}
 
 
 class InputRuleMiddleware(AgentMiddleware):
