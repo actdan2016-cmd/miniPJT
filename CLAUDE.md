@@ -21,7 +21,35 @@
 - 에이전트는 실습과 같은 `create_agent` + `AgentMiddleware` + `ChatBedrockConverse` + `SqliteSaver` 구성 (`day5_practice` 참고)
 - 웹서비스: Python FastAPI 백엔드 — 상담 챗은 `POST /query`(에이전트), 계산·조회 화면은 `/api/*`(도구 직접 호출). 화면은 Claude Design으로 별도 개발 (`docs/SCREEN_SPEC.md`)
 - 스택은 상위 폴더 `requirements.txt` 기준: LangChain/LangGraph, AWS Bedrock(langchain-aws), Chroma + BM25(kiwipiepy) 하이브리드 검색
-- 출발점 코드: 상위 폴더 `day3_practice`~`day6_practice`
+- 출발점 코드: 상위 폴더 `day1_practice`~`day7_practice` (평가·트레이스는 `day7_practice`)
+- 개발 순서: 평가 셋(`evaluation/test_queries.csv`) 확정 → Plan 모드로 계획 승인 → 1차 도구 3개(SERVICE.md §3-1) → 채점 기준선 → 한 번에 하나씩 고치는 루프
+
+## 파일 구성 (이 목록 밖의 파일은 만들지 않는다)
+| 파일 | 역할 |
+|---|---|
+| `src/api.py` | FastAPI 진입점 (`POST /query`, `/api/*`) |
+| `src/agent.py` | `create_agent` 조립, 시스템 프롬프트, 미들웨어 순서 |
+| `src/tools.py` | 도메인 도구 (`@tool`) |
+| `src/retriever.py` | RAG 파이프라인 |
+| `src/grades.py` | 평균·환산·판정·What-if 순수 함수 |
+| `src/data_store.py` | CSV 로드·조회 |
+| `src/middleware.py` | PII 마스킹, 입력 규칙 선처리, 트레이스 |
+| `src/guardrails.py` | 출력 가드레일, 결과표 렌더링 |
+| `src/replies.py` | 고정 응답 문구 |
+| `tests/test_grades.py` | `grades.py` 단위 테스트 |
+| `evaluation/run_eval.py` | 평가셋 실행·채점·RAGAS |
+
+## 코드 규칙
+- 파일 하나에 한 가지 역할만 둔다 (위 표)
+- 함수와 도구에는 한국어 docstring을 쓴다. 도구 docstring은 "언제 쓰는지"를 첫 줄에 쓴다
+- 비밀 값(AWS 키 등)은 `.env`에서 읽고 코드·로그에 적지 않는다
+- 숫자 계산은 `grades.py` 함수만 하고, 도구·프롬프트에서 따로 계산하지 않는다
+
+## 하지 말 것
+- 요청하지 않은 파일을 새로 만들지 않는다
+- 기존 파일을 통째로 다시 쓰지 않는다. 바뀐 부분만 고친다
+- `evaluation/test_queries.csv`를 통과율을 올리려고 고치지 않는다 (문항 수정은 사용자 승인 후에만)
+- 평가 루프에서 한 번에 여러 곳을 고치지 않는다
 
 ## 데이터 규칙
 - CSV는 UTF-8 BOM, pandas `encoding="utf-8-sig"`, 필드 내 다중값은 `;`
