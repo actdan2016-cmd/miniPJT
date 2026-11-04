@@ -54,6 +54,35 @@ def gpa_summary(rows: list[dict]) -> dict:
     return {"semesters": by_sem, "cumulative": cumulative}
 
 
+def semester_trend(summary: dict, scope: str = "전과목") -> dict | None:
+    """gpa_summary 결과에서 직전 학기 대비 변화를 구한다. 등급은 작을수록 좋으므로 change<0이면 상승.
+
+    반환: {"from": "1-1", "to": "1-2", "change": -0.13, "direction": "상승"} 또는 학기가 하나면 None
+    """
+    sems = [s for s, v in summary["semesters"].items() if v[scope]["avg"] is not None]
+    if len(sems) < 2:
+        return None
+    a, b = summary["semesters"][sems[-2]][scope]["avg"], summary["semesters"][sems[-1]][scope]["avg"]
+    change = round(b - a, 2)
+    direction = "상승" if change < 0 else "하락" if change > 0 else "유지"
+    return {"from": sems[-2], "to": sems[-1], "change": change, "direction": direction}
+
+
+def baseline_cut(track_type: str, cut_70: float | None, cut_50: float | None, cut_avg: float | None) -> dict:
+    """판정 기준선(c)을 고른다 (SERVICE.md §3-2 v1).
+
+    4년제 학생부교과: 70% 컷, 없으면 50% 컷 / 전문대 수시: 합격자 평균
+    반환: {"cut": 값 또는 None, "basis": "70% 컷"·"50% 컷"·"합격자 평균"·None}
+    """
+    if track_type == "전문대수시":
+        return {"cut": cut_avg, "basis": "합격자 평균" if cut_avg is not None else None}
+    if cut_70 is not None:
+        return {"cut": cut_70, "basis": "70% 컷"}
+    if cut_50 is not None:
+        return {"cut": cut_50, "basis": "50% 컷"}
+    return {"cut": None, "basis": None}
+
+
 def to_percentile(avg5: float) -> float:
     """5등급 평균을 누적 백분위(%)로 바꾼다. 등급 중간 백분위 사이를 선형 보간한다."""
     if not 1 <= avg5 <= 5:

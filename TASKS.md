@@ -12,7 +12,7 @@
   - 확인: `pytest tests/test_grades.py` 통과 — 51/23=2.22, 2.2→3.73, 2.0→3.34, 2.4→4.09, 105/46→3.89, 3.5→5.76, 구간 경계값
 - [x] **A3. `src/data_store.py`**: CSV 로드와 조회(대학·모집단위·전형·학년도), 수도권/비수도권 구분
   - 확인: 인하대 컴퓨터공학과 지역균형 2026 조회 → 25명·7.1:1·충원 42·2.19/2.28 (7번 정답)
-- [ ] **A4. `src/tools.py` 1차 도구 3개**: `calc_school_gpa`, `lookup_admission_results`, `classify_chances` (도구 docstring 첫 줄은 "언제 쓰는지")
+- [x] **A4. `src/tools.py` 1차 도구 3개**: `calc_school_gpa`, `lookup_admission_results`, `classify_chances` (도구 docstring 첫 줄은 "언제 쓰는지")
   - 확인: 도구를 직접 호출해 3번 정답(수원대 교과우수=상향 c=3.43 등)과 22번 정답(누적 2.28 → 3.89)이 나온다
 - [ ] **A5. `src/api.py` 계산 API + 화면 서빙**: FastAPI가 `web/`을 띄우고 `POST /api/grades/analyze`, `POST /api/predict`는 도구를 직접 호출(LLM 없음)
   - 확인: http://localhost:8000/docs 에서 22번 성적으로 두 API를 호출해 2.28·3.89와 판정 목록이 온다

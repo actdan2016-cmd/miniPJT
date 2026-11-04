@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.grades import (  # noqa: E402
-    MID_PCT_5, MID_PCT_9, classify, convert_5to9, gpa_summary, to_grade9, to_percentile, weighted_average,
+    MID_PCT_5, MID_PCT_9, baseline_cut, classify, convert_5to9, gpa_summary, semester_trend, to_grade9,
+    to_percentile, weighted_average,
 )
 
 
@@ -120,3 +121,19 @@ def test_classify_boundaries(g, label):
 def test_classify_gap_value():
     assert classify(3.89, 2.6) == {"label": "격차 큼", "gap": 1.29}
     assert classify(3.89, 3.9) == {"label": "적정", "gap": -0.01}
+
+
+# ---------- 추이·기준선 ----------
+def test_q22_trend():
+    assert semester_trend(gpa_summary(load_sample())) == {"from": "1-1", "to": "1-2", "change": -0.13, "direction": "상승"}
+    assert semester_trend(gpa_summary(Q1)) is None
+
+
+@pytest.mark.parametrize("ttype, c70, c50, cavg, expected", [
+    ("학생부교과", 3.43, 3.25, None, {"cut": 3.43, "basis": "70% 컷"}),
+    ("학생부교과", None, 2.4, None, {"cut": 2.4, "basis": "50% 컷"}),
+    ("학생부교과", None, None, None, {"cut": None, "basis": None}),       # 가천대 교과 = 입결 미공개
+    ("전문대수시", None, None, 2.05, {"cut": 2.05, "basis": "합격자 평균"}),  # 동남보건대
+])
+def test_baseline_cut(ttype, c70, c50, cavg, expected):
+    assert baseline_cut(ttype, c70, c50, cavg) == expected
