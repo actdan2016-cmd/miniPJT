@@ -130,9 +130,9 @@ function board(title, sub, items) {
   if (!judgedCount) {
     const scope = univType === '전체' ? '' : `${univType} `;
     const msg = !items.length
-      ? `${scope}'${result.input.keyword}' 계열은 이 조건에서 수집한 입결 데이터가 없습니다. (수집 범위: 간호 4년제 17곳·전문대 1곳(동남보건대), 컴퓨터공학 4년제 16곳)`
+      ? `${scope}'${result.input.keyword}' 계열은 이 조건에서 수집한 입결 데이터가 없습니다.`
       : `상향~안정 판정에 드는 전형이 없습니다. 아래 ${[gap.length && `격차 큼 ${gap.length}건`, hidden.length && `입결 미공개 ${hidden.length}건`, ref.length && `학생부종합 참고치 ${ref.length}건`].filter(Boolean).join(' · ')}을 확인해 주세요.`
-        + (univType === '전문대' ? ' 지금 수집한 전문대는 동남보건대 간호학부 1곳입니다.' : '');
+        + (univType === '전문대' ? ` 지금 이 계열에서 수집한 전문대는 ${new Set(items.map((x) => x.univ_name)).size}곳입니다.` : '');
     parts.push(el('p', { class: 'note', style: 'background: var(--warn-bg); color: var(--warn-strong); font-size: 14px' }, msg));
   }
   parts.push(el('div', { class: 'tiers' }, tiers));
