@@ -109,7 +109,7 @@ def _renamed_in_2028(track_name: str, tracks_2028: list[str]) -> bool:
 
 def _judge_row(r: dict, g9: float, keyword: str) -> dict:
     """입결 한 행을 판정한다: 교과·전문대 수시는 4단계+격차 큼, 종합은 참고치만, 컷이 없으면 미공개."""
-    item = {k: r[k] for k in ("univ_name", "univ_type", "region", "unit_name", "track_name", "track_type",
+    item = {k: r[k] for k in ("univ_name", "univ_type", "region", "is_metro", "unit_name", "track_name", "track_type",
                               "year", "cut_min", "source_doc")}
     if r["track_type"] == "학생부종합":
         ref = r["cut_70"] if r["cut_70"] is not None else r["cut_50"]
@@ -137,7 +137,7 @@ def classify_chances(avg5: float, keyword: str, univ_type: Literal["전체", "4�
 
     avg5: 5등급제 평균(1~5), keyword: 학과 키워드('간호', '컴퓨터'), univ_type: 4년제·전문대 거르기,
     year: 비교할 입결 학년도(기본 2026). 9등급 환산 후 학생부교과·전문대 수시 컷과 비교한다.
-    학생부종합은 판정 없이 참고치, 수능(정시)은 단위가 달라 제외한다. 수도권과 수도권 외 참고를 나눠 돌려준다.
+    학생부종합은 판정 없이 참고치, 수능(정시)은 단위가 달라 제외한다. 수도권·비수도권을 한 목록(results)으로 돌려주고 대학마다 지역을 붙인다.
     """
     conv = grades.convert_5to9(avg5)
     rows = [r for r in ds.admission_results(keyword=keyword, year=year)
@@ -164,8 +164,7 @@ def classify_chances(avg5: float, keyword: str, univ_type: Literal["전체", "4�
     return {
         "input": {"avg5": avg5, "keyword": keyword, "univ_type": univ_type, "year": year},
         "conversion": conv,
-        "metro": [x for x in items if x["region"] in ds.METRO_REGIONS],
-        "non_metro_reference": [x for x in items if x["region"] not in ds.METRO_REGIONS],
+        "results": items,
         "premise": PREMISE,
         "notes": notes,
     }
@@ -259,14 +258,13 @@ def simulate_improvement(subjects: list, keyword: str, target_univ: str | None =
     remaining = max(TOTAL_SEMESTERS - len(done), 0)
     future_credits = round(cum["credits"] / len(done) * remaining)
     board = classify_chances.invoke({"avg5": cum["avg"], "keyword": keyword})
-    judged = [x for x in board["metro"] + board["non_metro_reference"] if x.get("judged")]
+    judged = [x for x in board["results"] if x.get("judged")]
     if target_univ:
         u = ds.find_university(target_univ)
         picks = [x for x in judged if u and x["univ_name"] == u["univ_name"] and (not target_track or target_track in x["track_name"])]
     else:
-        metro = [x for x in board["metro"] if x.get("judged")]
-        gap_big = sorted([x for x in metro if x["label"] == "격차 큼"], key=lambda x: x["gap"])[:2]
-        upward = sorted([x for x in metro if x["label"] == "상향"], key=lambda x: x["gap"])[:2]
+        gap_big = sorted([x for x in judged if x["label"] == "격차 큼"], key=lambda x: x["gap"])[:2]
+        upward = sorted([x for x in judged if x["label"] == "상향"], key=lambda x: x["gap"])[:2]
         picks = upward + gap_big
     targets = []
     for x in picks:

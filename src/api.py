@@ -109,7 +109,7 @@ def _tool_contexts(name: str, result: dict) -> list[dict]:
         rows = [(x["source_doc"], f"{x['univ_name']} {x['unit_name']} {x['track_name']} {x['year']}학년도 "
                  + (f"{x['basis']} {x['cut']} → {x['label']}({x['gap']:+.2f})" if x["judged"]
                     else f"{x['label']}" + (f" {x['basis']} {x['cut']}" if x["cut"] is not None else "")))
-                for x in result["metro"] + result["non_metro_reference"]]
+                for x in result["results"]]
         head = [{"doc_id": "계산: classify_chances (grades.py 5→9 환산·판정 규칙 v1)",
                  "text": f"5등급 {conv['avg5']} → 누적 백분위 {conv['percentile']}% → 9등급 {conv['grade9']}"}]
     elif name == "lookup_admission_results":
@@ -204,7 +204,7 @@ def analyze_grades(req: GpaInput) -> dict:
 
 @app.post("/api/predict")
 def predict(req: PredictRequest) -> dict:
-    """지원 가능 대학 판정 보드 (수도권 / 수도권 외 참고) → classify_chances"""
+    """지원 가능 대학 판정 보드 (수도권·비수도권 함께, 지역 표시) → classify_chances"""
     return _call(classify_chances, req.model_dump())
 
 

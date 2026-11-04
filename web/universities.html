@@ -75,7 +75,7 @@ details.more summary { cursor: pointer; min-height: 44px; display: flex; align-i
 renderHeader('universities.html');
 const $ = (id) => document.getElementById(id);
 const TIERS = [
-  { name: '상향', rule: '컷보다 0.5~1.0 불리' }, { name: '소신', rule: '컷보다 0~0.5 불리' },
+  { name: '상향', rule: '컷보다 0.5~1.0 불리 · 도전' }, { name: '소신', rule: '컷보다 0~0.5 불리' },
   { name: '적정', rule: '컷 이내 (0.5 여유까지)' }, { name: '안정', rule: '컷보다 0.5 넘게 유리' },
 ];
 const TYPES = [['전체', '전체'], ['4년제', '4년제'], ['전문대', '전문대']];
@@ -125,14 +125,14 @@ function board(title, sub, items) {
   if (gap.length) parts.push(el('section', { class: 'card' },
     el('h2', {}, `격차 큼 ${gap.length} · 컷까지 1등급 넘게 차이`),
     el('p', { class: 'small', style: 'margin: -4px 0 12px' }, '숨기지 않고 보여 드립니다. 보강 과목(What-if) 화면에서 컷까지 줄이는 방법을 볼 수 있습니다.'),
-    listTable(gap, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
+    listTable(gap, [['대학', (x) => x.univ_name], ['지역', (x) => x.region], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
       ['기준선', (x) => `${fmt(x.cut)} (${x.basis})`], ['컷까지', (x) => gapText(x.gap)], ['출처', (x) => friendlySource(x.source_doc, x.year)]])));
   if (hidden.length) parts.push(el('section', { class: 'card' }, el('h2', {}, `입결 미공개 ${hidden.length}`),
-    listTable(hidden, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)], ['사유', (x) => x.reason]])));
+    listTable(hidden, [['대학', (x) => x.univ_name], ['지역', (x) => x.region], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)], ['사유', (x) => x.reason]])));
   if (ref.length) parts.push(el('details', { class: 'card more' },
     el('summary', {}, `학생부종합 참고치 ${ref.length} · 판정 없음`),
     el('p', { class: 'small', style: 'margin: 0 0 12px' }, '정성평가 전형이라 등급만으로 판단하지 않습니다. 합격자 내신(9등급)만 참고로 보여 드립니다.'),
-    listTable(ref, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
+    listTable(ref, [['대학', (x) => x.univ_name], ['지역', (x) => x.region], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
       ['합격자 내신', (x) => `${fmt(x.cut)}${x.basis ? ` (${x.basis})` : ''}`], ['출처', (x) => friendlySource(x.source_doc, x.year)]])));
   return el('div', { class: 'board' }, parts);
 }
@@ -145,12 +145,10 @@ function renderTypes() {
 function render() {
   if (!result) return;
   const keep = (x) => univType === '전체' || x.univ_type === univType;
-  const metro = result.metro.filter(keep), other = result.non_metro_reference.filter(keep);
-  const units = [...new Set([...result.metro, ...result.non_metro_reference].map((x) => x.unit_name))];
+  const items = result.results.filter(keep);
+  const units = [...new Set(result.results.map((x) => x.unit_name))];
   $('units').replaceChildren(...(units.length ? units.map((u) => el('span', { class: 'chip' }, u)) : [el('span', { class: 'small' }, '찾은 모집단위가 없습니다.')]));
-  $('boards').replaceChildren(
-    board('수도권', '서울·경기·인천', metro),
-    board('수도권 외 참고', '기본 목록 밖 지역 · 참고용', other));
+  $('boards').replaceChildren(board('지원 가능성 판정', '수도권·비수도권 함께 · 카드마다 지역 표시', items));
   $('notes').textContent = [result.premise, ...result.notes].join(' ');
 }
 

@@ -64,23 +64,22 @@ def _judged_table(items: list[dict]) -> list[str]:
     rows = [x for x in items if x["label"] in JUDGED_ORDER]
     if not rows:
         return ["판정 대상(학생부교과·전문대 수시) 전형이 없습니다."]
-    lines = ["| 판정 | 대학 | 모집단위 | 전형 | 기준선 | 컷까지 |", "|---|---|---|---|---|---|"]
+    lines = ["| 판정 | 대학 | 지역 | 모집단위 | 전형 | 기준선 | 컷까지 |", "|---|---|---|---|---|---|---|"]
     for x in rows:
         base = f"{_f(x['cut'])} ({x['basis']})" + (f", 최저 {_f(x['cut_min'])}" if x.get("cut_min") is not None else "")
         label = f"**{x['label']}**" if x["label"] != "격차 큼" else x["label"]
-        lines.append(f"| {label} | {_short_univ(x['univ_name'])} | {x['unit_name']} | {x['track_name']} | {base} | {_gap(x['gap'])} |")
+        lines.append(f"| {label} | {_short_univ(x['univ_name'])} | {x['region']} | {x['unit_name']} | {x['track_name']} | {base} | {_gap(x['gap'])} |")
     return lines
 
 
 def render_chances(r: dict) -> str:
-    """classify_chances 결과 → 수도권 / 수도권 외 참고 판정표 + 입결 미공개·종합 참고치 + 안내"""
+    """classify_chances 결과 → 지역 열이 있는 판정표(수도권·비수도권 함께) + 입결 미공개·종합 참고치 + 안내"""
     c = r["conversion"]
     out = [f"**지원 가능성 판정** · '{r['input']['keyword']}' · 5등급 {_f(c['avg5'])} → 누적 백분위 {c['percentile']}% "
            f"→ 9등급 약 {_f(c['grade9'])} · {r['input']['year']}학년도 입결 기준선과 비교"]
-    for title, items in (("수도권", r["metro"]), ("수도권 외 참고", r["non_metro_reference"])):
-        if not items:
-            continue
-        out += ["", f"**{title}**", "", *_judged_table(items)]
+    items = r["results"]
+    if items:
+        out += ["", *_judged_table(items)]
         hidden = [x for x in items if x["label"] == "입결 미공개"]
         if hidden:
             out += ["", "입결 미공개(판정 안 함): " + ", ".join(f"{_short_univ(x['univ_name'])} {x['track_name']}" for x in hidden)]
@@ -89,7 +88,7 @@ def render_chances(r: dict) -> str:
             out += ["", "학생부종합 합격자 내신 참고치(정성평가라 판정 안 함): "
                     + ", ".join(f"{_short_univ(x['univ_name'])} {x['unit_name']} {x['track_name'].replace('학생부종합', '').strip('()')} {_f(x['cut'])}"
                                 for x in ref if x["cut"] is not None)]
-    srcs = sorted({friendly_source(x["source_doc"]) for x in r["metro"] + r["non_metro_reference"]})
+    srcs = sorted({friendly_source(x["source_doc"]) for x in r["results"]})
     if srcs:
         out += ["", f"출처: {', '.join(srcs)} ({r['input']['year']}학년도 입시결과)"]
     out += [f"- {n}" for n in r.get("notes", [])]
@@ -165,7 +164,7 @@ def render_programs(r: dict) -> str:
         return "\n".join(r["notes"])
     lines = [f"**'{r['keyword']}' 관련 모집단위** · {r['count_univs']}개 대학 {r['count_units']}개 모집단위", "",
              "| 대학 | 구분 | 지역 | 모집단위 |", "|---|---|---|---|"]
-    lines += [f"| {_short_univ(u['univ_name'])} | {u['univ_type']} | {u['region']}{'' if u['is_metro'] else ' (수도권 외)'} | {', '.join(u['units'])} |"
+    lines += [f"| {_short_univ(u['univ_name'])} | {u['univ_type']} | {u['region']} | {', '.join(u['units'])} |"
               for u in r["universities"]]
     return "\n".join(lines + [f"- {n}" for n in r["notes"]])
 
