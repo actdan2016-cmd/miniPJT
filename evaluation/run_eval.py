@@ -25,13 +25,14 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from src.api import QueryRequest, query  # noqa: E402  (/query 와 같은 경로로 실행)
+from src.replies import REFUSAL_SIGNAL  # noqa: E402
 
 load_dotenv()
 
 QUERIES = ROOT / "evaluation" / "test_queries.csv"
 
-# 거절(차단) 신호: B1에서 replies.py 고정 문구가 생기면 그 문구를 추가한다
-BLOCK_SIGNALS = ["할 수 없", "드릴 수 없", "작성하지 않", "제공하지 않", "응할 수 없", "도와드리기 어렵"]
+# 거절(차단) 신호: 입력 가드레일 고정 문구(replies.py)를 기준으로 한다 (교안 BLOCK_SIGNALS 방식)
+BLOCK_SIGNALS = [REFUSAL_SIGNAL]
 # 데이터 없음 신호 (교안 NO_ANSWER_SIGNALS + 이 서비스 표현)
 NO_ANSWER_SIGNALS = ["찾을 수 없", "포함되어 있지 않", "문서에 없", "확인할 수 없", "제공되지 않",
                      "수집한 데이터", "수집 데이터", "데이터에 없", "예측할 수 없", "알 수 없"]

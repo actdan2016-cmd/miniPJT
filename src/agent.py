@@ -16,6 +16,7 @@ from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+from src.middleware import InputRuleMiddleware
 from src.tools import calc_school_gpa, classify_chances, lookup_admission_results
 
 load_dotenv()
@@ -71,13 +72,16 @@ def open_checkpointer(path: Path = CHECKPOINT_DB) -> SqliteSaver:
 
 
 def build_agent(checkpointer=None):
-    """입시나침반 에이전트를 조립한다. 기본 모델 실패 시 FALLBACK_MODELS 순서로 대체한다."""
+    """입시나침반 에이전트를 조립한다.
+
+    미들웨어 순서(바깥 → 안): 입력 규칙 차단 → 모델 대체. 차단되면 모델(대체 모델 포함)을 아예 부르지 않는다.
+    """
     return create_agent(
         model=build_llm(PRIMARY_MODEL),
         tools=TOOLS,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
-        middleware=[ModelFallbackMiddleware(*[build_llm(m) for m in FALLBACK_MODELS])],
+        middleware=[InputRuleMiddleware(), ModelFallbackMiddleware(*[build_llm(m) for m in FALLBACK_MODELS])],
     )
 
 

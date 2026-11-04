@@ -104,8 +104,10 @@ def _contexts_and_trace(question: str, messages: list, answer: str) -> tuple[lis
             trace.append({"step": f"tool_result:{name}", "input": calls.get(m.tool_call_id, {}).get("args", {}),
                           "output": str(m.content)[:500]})
     final = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
-    model = (final.response_metadata or {}).get("model_name") if final else None
-    trace.append({"step": "answer", "input": {"model": model}, "output": answer[:500]})
+    meta = (final.response_metadata or {}) if final else {}
+    if final is not None and final.name == "input_guard":
+        trace.append({"step": "input_guard", "input": {"rule": meta.get("guard")}, "output": "차단: 모델 호출 없이 고정 문구로 응답"})
+    trace.append({"step": "answer", "input": {"model": meta.get("model_name")}, "output": answer[:500]})
     return contexts, trace
 
 
