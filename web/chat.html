@@ -29,7 +29,7 @@ main.wrap { max-width: 880px; }
 .ctx-item[open] { padding-bottom: 10px; }
 .ctx-item ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; color: var(--text-2); font-size: 13px; }
 .trace pre { margin: 4px 0 0; white-space: pre-wrap; font: inherit; }
-.trace { margin: 0; padding: 12px 14px 12px 32px; background: #18202B; color: #E2E5EA; border-radius: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
+.trace { margin: 10px 0 0; padding: 12px 14px 12px 32px; background: #18202B; color: #E2E5EA; border-radius: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
 .trace pre { color: #C9CFD8; max-height: 160px; overflow: auto; }
 .suggest { display: flex; flex-wrap: wrap; gap: 8px; }
 .suggest button { min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; font-size: 14px; cursor: pointer; }
@@ -149,8 +149,11 @@ function contextList(contexts) {
 function answerCard(res) {
   const ctxList = el('details', { class: 'ctx-wrap' },
     el('summary', { class: 'ctx-btn' }, `근거 보기 (${res.contexts.length}건)`), contextList(res.contexts));
-  const trace = el('ol', { class: 'trace', 'data-trace': '' , hidden: !$('dev').checked }, res.trace.map((t) => el('li', {}, el('strong', {}, t.step),
-    el('pre', {}, [typeof t.input === 'string' ? t.input : JSON.stringify(t.input), t.output ? '→ ' + t.output : ''].filter(Boolean).join('\n')))));
+  // 처리 과정(trace 원자료)은 개발자 모드에서만 보이고, 근거 보기처럼 접힌 상태로 시작한다
+  const trace = el('details', { class: 'ctx-wrap', 'data-trace': '', hidden: !$('dev').checked },
+    el('summary', { class: 'ctx-btn' }, `처리 과정 보기 (${res.trace.length}단계 · 개발자용)`),
+    el('ol', { class: 'trace' }, res.trace.map((t) => el('li', {}, el('strong', {}, t.step),
+      el('pre', {}, [typeof t.input === 'string' ? t.input : JSON.stringify(t.input), t.output ? '→ ' + t.output : ''].filter(Boolean).join('\n'))))));
   return el('article', { class: 'a' }, markdown(res.answer), res.contexts.length ? ctxList : null, trace);
 }
 
