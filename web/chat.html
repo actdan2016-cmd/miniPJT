@@ -18,9 +18,17 @@ main.wrap { max-width: 880px; }
 .a th, .a td { border-bottom: 1px solid var(--line-soft); padding: 7px 8px; text-align: left; }
 .a th { color: var(--muted); font-weight: 600; font-size: 13px; }
 .a code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
-.ctx-btn { align-self: flex-start; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 8px; font-size: 14px; cursor: pointer; }
-.ctx { margin: 0; padding: 12px 14px; list-style: none; background: var(--bg); border-radius: 8px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
-.ctx pre, .trace pre { margin: 4px 0 0; white-space: pre-wrap; font: inherit; color: var(--text-2); }
+.ctx-wrap > summary { list-style: none; }
+.ctx-wrap > summary::-webkit-details-marker { display: none; }
+.ctx-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 8px; font-size: 14px; cursor: pointer; }
+.ctx-btn::before { content: '▸'; color: var(--muted); }
+.ctx-wrap[open] > .ctx-btn::before { content: '▾'; }
+.ctx { margin-top: 10px; padding: 12px 14px; background: var(--bg); border-radius: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.ctx-item { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; }
+.ctx-item summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 4px; font-weight: 600; }
+.ctx-item[open] { padding-bottom: 10px; }
+.ctx-item ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; color: var(--text-2); font-size: 13px; }
+.trace pre { margin: 4px 0 0; white-space: pre-wrap; font: inherit; }
 .trace { margin: 0; padding: 12px 14px 12px 32px; background: #18202B; color: #E2E5EA; border-radius: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
 .trace pre { color: #C9CFD8; max-height: 160px; overflow: auto; }
 .suggest { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -117,21 +125,41 @@ function markdown(src) {
 // ---- 대화 ----
 function scrollEnd() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
 
+// 근거(contexts)를 학부모가 읽기 쉬운 제목으로 바꾼다. doc_id 원문은 펼친 안쪽에 작게 남긴다.
+function contextTitle(c) {
+  if (c.doc_id.includes('calc_school_gpa')) return '평균 계산 (학점 가중 평균)';
+  if (c.doc_id.includes('classify_chances')) return '9등급 환산 (5등급 평균 → 9등급 근사치)';
+  if (c.doc_id.includes('lookup_admission_results')) return '입결 조회 결과';
+  const univ = (c.text.split('\n')[0] || '').split(' ')[0];
+  const year = (c.text.match(/(\d{4})학년도/) || [])[1];
+  const src = c.doc_id.startsWith('어디가') ? '어디가(대입정보포털)' : c.doc_id.startsWith('전문대학포털') ? '전문대학포털' : c.doc_id;
+  return `${univ}${year ? ` ${year}학년도` : ''} 입시결과 · 출처: ${src}`;
+}
+
+function contextList(contexts) {
+  return el('div', { class: 'ctx' },
+    el('p', { class: 'small', style: 'margin: 0' }, '답변의 숫자가 나온 근거입니다. 항목을 누르면 펼쳐집니다.'),
+    contexts.map((c) => {
+      const lines = c.text.split('\n').filter(Boolean);
+      return el('details', { class: 'ctx-item' },
+        el('summary', {}, contextTitle(c), lines.length > 1 ? el('span', { class: 'small' }, ` ${lines.length}건`) : null),
+        el('ul', {}, lines.map((l) => el('li', {}, l))),
+        el('p', { class: 'small', style: 'margin: 6px 0 0' }, `원본 출처: ${c.doc_id}`));
+    }));
+}
+
 function answerCard(res) {
-  const ctxList = el('ul', { class: 'ctx', hidden: true }, res.contexts.map((c) => el('li', {}, el('strong', {}, c.doc_id), el('pre', {}, c.text))));
-  const btn = el('button', { type: 'button', class: 'ctx-btn', 'aria-expanded': 'false', onClick: () => {
-    ctxList.hidden = !ctxList.hidden; btn.setAttribute('aria-expanded', String(!ctxList.hidden));
-    btn.textContent = ctxList.hidden ? `근거 보기 (${res.contexts.length}건)` : '근거 접기';
-  } }, `근거 보기 (${res.contexts.length}건)`);
+  const ctxList = el('details', { class: 'ctx-wrap' },
+    el('summary', { class: 'ctx-btn' }, `근거 보기 (${res.contexts.length}건)`), contextList(res.contexts));
   const trace = el('ol', { class: 'trace', 'data-trace': '' , hidden: !$('dev').checked }, res.trace.map((t) => el('li', {}, el('strong', {}, t.step),
     el('pre', {}, [typeof t.input === 'string' ? t.input : JSON.stringify(t.input), t.output ? '→ ' + t.output : ''].filter(Boolean).join('\n')))));
-  return el('article', { class: 'a' }, markdown(res.answer), res.contexts.length ? [btn, ctxList] : null, trace);
+  return el('article', { class: 'a' }, markdown(res.answer), res.contexts.length ? ctxList : null, trace);
 }
 
 async function send(question) {
   if (!question.trim()) return;
   $('log').append(el('div', { class: 'q' }, question));
-  const wait = el('p', { class: 'thinking', role: 'status' }, '답변을 만드는 중입니다. 도구를 호출하느라 30초~1분 걸릴 수 있어요.');
+  const wait = spinner('답변을 만드는 중입니다. 도구를 호출하느라 30초~1분 걸릴 수 있어요.', { elapsed: true });
   $('log').append(wait); scrollEnd();
   $('send').disabled = true; $('q').value = '';
   try {

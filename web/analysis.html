@@ -134,6 +134,7 @@ async function main() {
       el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
     return;
   }
+  $('content').replaceChildren(spinner('성적을 분석하는 중입니다.'));
   try {
     const res = await api('/api/grades/analyze', { subjects });
     const sems = Object.keys(res.semesters);
@@ -148,7 +149,7 @@ async function main() {
       el('div', { class: 'row stretch' }, trendChart(res), insights(res, subjects)),
       el('div', { class: 'row stretch' }, heatTable(subjects), conversionCard(res)),
       el('p', { class: 'small', style: 'margin: 0' }, res.notes.join(' '))));
-  } catch (e) { $('msg').textContent = e.message; $('msg').hidden = false; }
+  } catch (e) { $('content').replaceChildren(); $('msg').textContent = e.message; $('msg').hidden = false; }
 }
 main();
 </script>

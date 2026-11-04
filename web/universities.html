@@ -153,6 +153,7 @@ function render() {
 
 async function search(keyword) {
   $('msg').hidden = true;
+  $('boards').replaceChildren(spinner(`'${keyword}' 학과의 대학별 입결과 비교하는 중입니다.`));
   try {
     result = await api('/api/predict', { avg5, keyword });
     const c = result.conversion;
@@ -160,7 +161,7 @@ async function search(keyword) {
       ` (5등급 ${fmt(c.avg5)}, 누적 약 ${Number(c.percentile).toFixed(1)}%) · 2026학년도 입결 기준선과 비교`);
     profile.major = keyword; Store.save(profile);
     render();
-  } catch (e) { $('msg').textContent = e.message; $('msg').hidden = false; }
+  } catch (e) { $('boards').replaceChildren(); $('msg').textContent = e.message; $('msg').hidden = false; }
 }
 
 async function main() {
@@ -173,10 +174,12 @@ async function main() {
       el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
     return;
   }
+  $('boards').replaceChildren(spinner('성적을 불러오는 중입니다.'));
   try {
     const g = await api('/api/grades/analyze', { subjects });
     avg5 = g.cumulative['전과목'].avg;
-  } catch (e) { $('msg').textContent = e.message; $('msg').hidden = false; return; }
+    $('boards').replaceChildren();
+  } catch (e) { $('boards').replaceChildren(); $('msg').textContent = e.message; $('msg').hidden = false; return; }
   $('kw').value = profile.major || '';
   if (profile.major) search(profile.major);
   else $('lead').textContent = `5등급 누적 ${fmt(avg5)} · 희망 학과 키워드를 넣고 [찾기]를 눌러 주세요.`;

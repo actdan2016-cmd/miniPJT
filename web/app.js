@@ -50,6 +50,23 @@ function renderHeader(current) {
     el('div', { class: 'disclaimer' }, el('div', { class: 'wrap' }, DISCLAIMER)));
 }
 
+/** 공통 로딩 표시(스피너). elapsed=true면 경과 초를 함께 보여 준다. 화면에서 빠지면 타이머도 멈춘다. */
+function spinner(text, { elapsed = false } = {}) {
+  const sec = el('span', { class: 'loading-sec tabular' });
+  const node = el('div', { class: 'loading', role: 'status', 'aria-live': 'polite' },
+    el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('span', {}, text), elapsed ? sec : null);
+  if (elapsed) {
+    const start = Date.now();
+    const tick = () => {
+      if (!node.isConnected && Date.now() - start > 1000) return;  // 화면에서 빠지면 멈춤
+      sec.textContent = `${Math.floor((Date.now() - start) / 1000)}초`;
+      setTimeout(tick, 1000);
+    };
+    tick();
+  }
+  return node;
+}
+
 /** 이 브라우저에만 저장하는 학생 프로필(성적·희망 학과). 서버로 보내지 않으며, 저장이 막혀도 화면은 동작한다. */
 const Store = {
   key: 'ipsi.profile.v1',
