@@ -7,7 +7,7 @@ const PAGES = [
   { href: 'universities.html', label: '지원 가능 대학', ready: true },
   { href: 'improve.html', label: '보강 과목', ready: false },
   { href: 'roadmap.html', label: '학습 로드맵', ready: false },
-  { href: 'chat.html', label: '상담', ready: false },
+  { href: 'chat.html', label: '상담', ready: true },
 ];
 const SEMESTERS = ['1-1', '1-2', '2-1', '2-2', '3-1'];
 const GROUPS = ['국어', '수학', '영어', '사회', '과학', '한국사', '기타'];

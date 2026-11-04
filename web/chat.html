@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시나침반 · 상담</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<style>
+main.wrap { max-width: 880px; }
+.q { align-self: flex-end; max-width: 80%; padding: 12px 16px; background: var(--primary); color: #FFFFFF; border-radius: 16px 16px 4px 16px; font-size: 15px; line-height: 1.55; white-space: pre-wrap; }
+.a { align-self: stretch; background: var(--surface); border: 1px solid var(--line); border-radius: 4px 16px 16px 16px; padding: 18px 20px; font-size: 15px; line-height: 1.65; display: flex; flex-direction: column; gap: 10px; }
+.a h3 { margin: 8px 0 0; font-size: 17px; } .a h4 { margin: 6px 0 0; font-size: 15px; }
+.a p { margin: 0; } .a ul, .a ol { margin: 0; padding-left: 22px; } .a hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 0; width: 100%; }
+.a table { border-collapse: collapse; font-size: 14px; width: 100%; }
+.a th, .a td { border-bottom: 1px solid var(--line-soft); padding: 7px 8px; text-align: left; }
+.a th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.a code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+.ctx-btn { align-self: flex-start; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 8px; font-size: 14px; cursor: pointer; }
+.ctx { margin: 0; padding: 12px 14px; list-style: none; background: var(--bg); border-radius: 8px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.ctx pre, .trace pre { margin: 4px 0 0; white-space: pre-wrap; font: inherit; color: var(--text-2); }
+.trace { margin: 0; padding: 12px 14px 12px 32px; background: #18202B; color: #E2E5EA; border-radius: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
+.trace pre { color: #C9CFD8; max-height: 160px; overflow: auto; }
+.suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+.suggest button { min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; font-size: 14px; cursor: pointer; }
+.composer { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0 16px; display: flex; gap: 8px; }
+.composer textarea { flex: 1; min-height: 52px; max-height: 200px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 10px; font: inherit; font-size: 15px; resize: vertical; }
+.thinking { align-self: flex-start; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="site-top"></div>
+<main class="wrap">
+  <div class="page-head">
+    <h1>입시 상담</h1>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+      <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px">
+        <input type="checkbox" id="dev" style="width: 20px; height: 20px"> 개발자 모드 (trace 보기)
+      </label>
+      <button type="button" class="btn" id="reset">새 대화</button>
+    </div>
+  </div>
+  <p class="small" style="margin: -12px 0 0">성적·학과 질문에 수집 데이터(간호·컴퓨터공학 계열)와 계산 도구로 답합니다. 학생 이름·학교명은 적지 마세요.</p>
+  <div id="log" style="display: flex; flex-direction: column; gap: 16px" aria-live="polite"></div>
+  <div class="suggest" id="suggest"></div>
+  <form class="composer" id="form">
+    <label for="q" class="sr-only">질문 입력</label>
+    <textarea id="q" placeholder="성적이나 학과에 대해 물어보세요 (Enter 보내기, Shift+Enter 줄바꿈)" required></textarea>
+    <button type="submit" class="btn" id="send" style="min-height: 52px; font-weight: 600; background: var(--primary); color: #FFFFFF; border-color: var(--primary)">보내기</button>
+  </form>
+</main>
+
+<script>
+renderHeader('chat.html');
+const $ = (id) => document.getElementById(id);
+const THREAD_KEY = 'ipsi.thread.v1';
+let threadId = null;
+try { threadId = localStorage.getItem(THREAD_KEY); } catch { /* 저장 불가 */ }
+
+// ---- 마크다운(답변) → DOM. HTML은 해석하지 않고 글자로만 넣는다 ----
+function inline(text) {
+  const out = [];
+  const re = /\*\*(.+?)\*\*|`([^`]+)`/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(m[1] !== undefined ? el('strong', {}, m[1]) : el('code', {}, m[2]));
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+function cells(line) { return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()); }
+function markdown(src) {
+  const lines = src.replace(/\r/g, '').split('\n');
+  const out = [];
+  let para = [];
+  const flush = () => { if (para.length) { out.push(el('p', {}, para.flatMap((l, i) => i ? [el('br'), ...inline(l)] : inline(l)))); para = []; } };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) { flush(); continue; }
+    if (/^\s*(---|\*\*\*)\s*$/.test(line)) { flush(); out.push(el('hr')); continue; }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { flush(); out.push(el(h[1].length <= 2 ? 'h3' : 'h4', {}, inline(h[2]))); continue; }
+    if (line.trim().startsWith('|') && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1])) {
+      flush();
+      const head = cells(line); i += 2;
+      const body = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) body.push(cells(lines[i++]));
+      i--;
+      out.push(el('div', { class: 'table-scroll' }, el('table', {}, el('thead', {}, el('tr', {}, head.map((c) => el('th', { scope: 'col' }, inline(c))))),
+        el('tbody', {}, body.map((r) => el('tr', {}, r.map((c) => el('td', { class: 'tabular' }, inline(c)))))))));
+      continue;
+    }
+    const li = line.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
+    if (li) {
+      flush();
+      const ordered = /\d/.test(li[1]);
+      const items = [];
+      while (i < lines.length) {
+        const m = lines[i].match(/^\s*([-*]|\d+\.)\s+(.*)$/);
+        if (!m || /\d/.test(m[1]) !== ordered) break;
+        items.push(el('li', {}, inline(m[2]))); i++;
+      }
+      i--;
+      out.push(el(ordered ? 'ol' : 'ul', {}, items));
+      continue;
+    }
+    para.push(line);
+  }
+  flush();
+  return out;
+}
+
+// ---- 대화 ----
+function scrollEnd() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
+
+function answerCard(res) {
+  const ctxList = el('ul', { class: 'ctx', hidden: true }, res.contexts.map((c) => el('li', {}, el('strong', {}, c.doc_id), el('pre', {}, c.text))));
+  const btn = el('button', { type: 'button', class: 'ctx-btn', 'aria-expanded': 'false', onClick: () => {
+    ctxList.hidden = !ctxList.hidden; btn.setAttribute('aria-expanded', String(!ctxList.hidden));
+    btn.textContent = ctxList.hidden ? `근거 보기 (${res.contexts.length}건)` : '근거 접기';
+  } }, `근거 보기 (${res.contexts.length}건)`);
+  const trace = el('ol', { class: 'trace', 'data-trace': '' , hidden: !$('dev').checked }, res.trace.map((t) => el('li', {}, el('strong', {}, t.step),
+    el('pre', {}, [typeof t.input === 'string' ? t.input : JSON.stringify(t.input), t.output ? '→ ' + t.output : ''].filter(Boolean).join('\n')))));
+  return el('article', { class: 'a' }, markdown(res.answer), res.contexts.length ? [btn, ctxList] : null, trace);
+}
+
+async function send(question) {
+  if (!question.trim()) return;
+  $('log').append(el('div', { class: 'q' }, question));
+  const wait = el('p', { class: 'thinking', role: 'status' }, '답변을 만드는 중입니다. 도구를 호출하느라 30초~1분 걸릴 수 있어요.');
+  $('log').append(wait); scrollEnd();
+  $('send').disabled = true; $('q').value = '';
+  try {
+    const res = await api('/query', { question, thread_id: threadId });
+    threadId = res.thread_id;
+    try { localStorage.setItem(THREAD_KEY, threadId); } catch { /* 저장 불가 */ }
+    wait.replaceWith(answerCard(res));
+  } catch (e) {
+    wait.replaceWith(el('p', { class: 'error' }, e.message));
+  } finally { $('send').disabled = false; scrollEnd(); $('q').focus(); }
+}
+
+// 입력 화면에서 넣은 성적을 질문 문장으로 만든다 (평균은 서버가 계산)
+function gradesQuestion() {
+  const p = Store.load();
+  if (!p || !p.subjects.some((s) => s.grade != null)) return null;
+  const sems = SEMESTERS.filter((s) => p.subjects.some((x) => x.semester === s && x.grade != null));
+  const parts = sems.map((s) => `${semLabel(s)}: ` + p.subjects.filter((x) => x.semester === s && x.grade != null)
+    .map((x) => `${x.subject || x.group}(${x.group}) ${x.grade}등급 ${x.credits}학점`).join(', '));
+  const major = p.major ? ` 희망 학과는 ${p.major}야.` : '';
+  return `우리 애 성적이야. ${parts.join(' / ')}.${major} 학기별 추이랑 지금 수준에서 갈 만한 대학 보여줘`;
+}
+
+function renderSuggest() {
+  const items = ['인하대 컴퓨터공학과 학생부교과 지역균형 최근 2년 입결 보여줘',
+    '5등급제 평균 2.4인데 컴퓨터공학 수도권 대학 어디 볼 수 있어?', '앞에서 말한 성적 그대로 두고 간호학과로 바꿔서 다시 봐줘'];
+  const gq = gradesQuestion();
+  $('suggest').replaceChildren(
+    gq ? el('button', { type: 'button', style: 'border-color: var(--primary); color: var(--primary-dark); font-weight: 600', onClick: () => { $('q').value = gq; $('q').focus(); } }, '입력한 성적으로 질문하기') : null,
+    ...items.map((t) => el('button', { type: 'button', onClick: () => send(t) }, t)));
+}
+
+$('form').addEventListener('submit', (e) => { e.preventDefault(); send($('q').value); });
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send($('q').value); } });
+$('dev').addEventListener('change', () => document.querySelectorAll('[data-trace]').forEach((t) => { t.hidden = !$('dev').checked; }));
+$('reset').addEventListener('click', () => {
+  threadId = null;
+  try { localStorage.removeItem(THREAD_KEY); } catch { /* 저장 불가 */ }
+  $('log').replaceChildren();
+});
+renderSuggest();
+</script>
+</body>
+</html>
