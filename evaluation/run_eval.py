@@ -158,7 +158,7 @@ def ragas_scores(results: list[dict]) -> dict | None:
         if name not in sys.modules:
             m = types.ModuleType(name); setattr(m, attr, type(attr, (), {})); sys.modules[name] = m
     from langchain_aws import BedrockEmbeddings
-    from ragas import EvaluationDataset, evaluate
+    from ragas import EvaluationDataset, RunConfig, evaluate
     from ragas.embeddings import LangchainEmbeddingsWrapper
     from ragas.llms import LangchainLLMWrapper
     from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
@@ -173,7 +173,9 @@ def ragas_scores(results: list[dict]) -> dict | None:
     llm = LangchainLLMWrapper(ChatBedrockConverse(model=JUDGE_MODEL, region_name="us-east-1", temperature=0))
     emb = LangchainEmbeddingsWrapper(BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0", region_name="us-east-1"))
     res = evaluate(data, metrics=[faithfulness, answer_relevancy, context_recall, context_precision], llm=llm, embeddings=emb,
-                   show_progress=False)
+                   show_progress=False,
+                   # 기본(동시 16개·180초)은 Bedrock 처리량 제한에 걸려 TimeoutError가 났다 (Round 2·3) → 동시 2개로 줄인다
+                   run_config=RunConfig(max_workers=2, timeout=600, max_retries=6))
     df = res.to_pandas()
     per_item = {rows[i]["row"]["id"]: {m: round(float(df.iloc[i][m]), 3) for m in
                                        ("faithfulness", "answer_relevancy", "context_recall", "context_precision")} for i in range(len(rows))}

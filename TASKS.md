@@ -38,19 +38,24 @@
 ## 묶음 C · RAG와 2차 도구
 - [x] **C1. `src/retriever.py`**: `data/raw/policies/` 시행계획(PDF·HWP·MD) 로드 → 청크 → Chroma(titan v2) + BM25(kiwipiepy) 하이브리드
   - 확인: "한양대 간호 추천형 수능최저" 검색 상위 3개에 `한양대_2028_시행계획.pdf` p.13이 있다
-- [ ] **C2. `retrieve_admission_docs` + `convert_grade_5to9` 도구**
+- [x] **C2. `retrieve_admission_docs` + `convert_grade_5to9` 도구**
   - 확인: 상담 화면에서 4·10·12·24번 질문 → 답에 문서명·학년도가 있고 근거 패널에 해당 청크가 보인다
-- [ ] **C3. `get_recommended_courses` + `simulate_improvement` 도구 + `POST /api/simulate`**
+  - 결과(Round 3): 4번 통과. 10번(표 평탄화로 인원 오독)·12번(거절 신호 검사 부적합)·24번(4년제 예시 혼입)은 FAIL
+- [x] **C3. `get_recommended_courses` + `simulate_improvement` 도구 + `POST /api/simulate`**
   - 확인: 5·6·23번 통과 (23번은 수원대 간호 교과우수 c=2.65까지의 격차 제시)
-- [ ] **C4. 화면 4·5 (보강 과목 What-if · 학습 로드맵)**: 시안 Improve·Roadmap을 옮기고 C3 API에 연결
+  - 결과(Round 3): 5·6번 통과, 23번 judge 5점이지만 lookup_admission_results 미호출로 FAIL
+- [x] **C4. 화면 4·5 (보강 과목 What-if · 학습 로드맵)**: 시안 Improve·Roadmap을 옮기고 C3 API에 연결
   - 확인: 보강 화면에서 과목 등급을 바꾸면 평균·9등급·판정이 즉시 바뀌고, 로드맵에 권장과목과 출처가 보인다
 - [ ] **C5. 평가 확장**: RAGAS 5건(4·10·12·24·26) (`llm_judge` 정답 대조는 A10에 포함)
   - 확인: 리포트에 RAGAS 지표 4개가 숫자로 나온다
+  - **미완:** 구현은 했지만 Round 2·3 모두 타임아웃·Bedrock 일일 토큰 한도로 nan. 동시 호출 2개로 줄임. 한도가 풀리면 `--round 3 --ids 4,10,12,24,26 --ragas`
 
 ## 묶음 D · 3차 도구와 개선 루프
-- [ ] **D1. `search_programs` + `save_student_profile`(HITL) + 화면 1 "프로필 저장" 승인 모달**
+- [x] **D1. `search_programs` + `save_student_profile`(HITL) + 화면 1 "프로필 저장" 승인 모달**
   - 확인: 15번 통과, 17번 멀티턴에서 성적 재입력을 요구하지 않음, 화면에서 승인하기 전에는 저장되지 않음
 - [ ] **D2. 개선 루프 (최대 3회)**: 실패 하나 고르기 → 원인 설명 → 한 곳만 수정 → 28건 재실행 → 커밋
   - 확인: `evaluation/round2_report.md` 통과율 ≥ 85%, guardrail 100%
-- [ ] **D3. README 마무리**: 실행 방법(화면 포함), 평가 결과 숫자, 트라이앤에러 회고
+  - **결과: 목표 미달.** Round 2 13/28 → Round 3 19/28(68%), guardrail 4/5. 토큰 한도 때문에 '한 곳만 수정'이 아니라 실패 원인 여러 개를 한 번에 고친 뒤 실패 15건만 재채점하고 28건을 다시 돌렸다(1회)
+- [x] **D3. README 마무리**: 실행 방법(화면 포함), 평가 결과 숫자, 트라이앤에러 회고
   - 확인: README의 숫자가 `round1/2_report.md`와 같고, README대로 따라 하면 화면이 뜬다
+  - 결과: README 통과율 표가 round1~3 리포트 숫자와 같음. RAGAS 칸은 미측정으로 표기
