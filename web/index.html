@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시나침반 · 성적 입력</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<div id="site-top"></div>
+<main class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>성적 입력</h1>
+      <p class="lead">성적표의 석차등급(1~5)과 학점을 학기별로 입력하세요. 등급이 없는 과목은 평균에서 빠집니다.</p>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <label class="btn" style="display: inline-flex; align-items: center" for="csv">CSV 불러오기</label>
+      <input id="csv" type="file" accept=".csv" class="sr-only">
+      <button type="button" class="btn" id="sample">예시 학생으로 체험</button>
+    </div>
+  </div>
+  <p class="error" id="msg" hidden></p>
+
+  <div class="row">
+    <section class="card grow" aria-label="학기별 성적">
+      <div class="tabs" role="tablist" aria-label="학기" id="tabs"></div>
+      <div class="table-scroll">
+        <table class="grades">
+          <thead><tr><th scope="col">과목</th><th scope="col">교과군</th><th scope="col">학점</th><th scope="col">석차등급</th><th scope="col">성취도</th><th scope="col"><span class="sr-only">삭제</span></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="small" id="empty-sem" hidden>이 학기에 입력한 과목이 없습니다.</p>
+      <button type="button" class="btn dashed" id="add" style="margin-top: 12px">+ 과목 추가</button>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <h2 style="font-size: 16px" id="sem-title">학기 평균</h2>
+        <div style="display: flex; align-items: baseline; gap: 8px">
+          <span class="big primary" id="avg">–</span>
+          <span class="muted" style="font-size: 14px">등급 (학점 가중)</span>
+        </div>
+        <p class="small tabular" style="margin: 6px 0 0" id="formula">계산식 –</p>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 16px">
+          <div style="background: var(--bg); border-radius: 8px; padding: 10px 12px">
+            <div class="small">국영수사</div><div style="font-size: 20px; font-weight: 600" class="tabular" id="avg-kems">–</div>
+          </div>
+          <div style="background: var(--bg); border-radius: 8px; padding: 10px 12px">
+            <div class="small">국영수과</div><div style="font-size: 20px; font-weight: 600" class="tabular" id="avg-kemc">–</div>
+          </div>
+        </div>
+      </section>
+      <section class="card" style="display: flex; flex-direction: column; gap: 12px">
+        <label class="lbl" for="major">희망 학과 (선택)</label>
+        <input id="major" class="field" type="text" placeholder="예: 컴퓨터공학, 간호">
+        <label class="lbl" for="field">희망 계열 (선택)</label>
+        <select id="field" class="field">
+          <option value="">계열 선택 안 함</option><option>인문</option><option>사회</option><option>자연</option><option>공학</option><option>보건</option>
+        </select>
+        <p class="small" style="margin: 0">학생 이름·학교명은 받지 않습니다. 입력한 성적은 이 브라우저에만 저장됩니다.</p>
+      </section>
+      <a href="analysis.html" class="btn primary">분석하기</a>
+      <button type="button" class="btn" disabled title="프로필 저장(승인 후 저장)은 D1 작업에서 연결합니다">프로필 저장 (확인 후 저장) · 준비 중</button>
+    </aside>
+  </div>
+</main>
+
+<script>
+renderHeader('index.html');
+let profile = Store.load() || emptyProfile();
+let sem = SEMESTERS.find((s) => profile.subjects.some((x) => x.semester === s)) || '1-1';
+let timer = null;
+
+const $ = (id) => document.getElementById(id);
+function showError(text) { $('msg').textContent = text; $('msg').hidden = !text; }
+function persist() { Store.save(profile); scheduleAnalyze(); }
+
+function renderTabs() {
+  $('tabs').replaceChildren(...SEMESTERS.map((s) => {
+    const has = profile.subjects.some((x) => x.semester === s);
+    return el('button', { type: 'button', role: 'tab', class: 'tab' + (has ? '' : ' empty'), 'aria-selected': String(s === sem),
+      onClick: () => { sem = s; render(); } }, semLabel(s));
+  }));
+}
+
+function gradeButtons(subj) {
+  const opts = [1, 2, 3, 4, 5].map((n) => el('button', { type: 'button', class: 'grade-opt', 'aria-pressed': String(subj.grade === n),
+    'aria-label': `${n}등급`, onClick: () => { subj.grade = n; persist(); render(); } }, String(n)));
+  opts.push(el('button', { type: 'button', class: 'grade-opt none', 'aria-pressed': String(subj.grade == null), 'aria-label': '등급 없음',
+    title: '석차등급이 없는 과목(성취도만)은 평균에서 빠집니다', onClick: () => { subj.grade = null; persist(); render(); } }, '등급 없음'));
+  return el('div', { class: 'grade-opts', role: 'group', 'aria-label': `${subj.subject || '과목'} 석차등급` }, opts);
+}
+
+function renderRows() {
+  const list = profile.subjects.filter((x) => x.semester === sem);
+  $('empty-sem').hidden = list.length > 0;
+  $('rows').replaceChildren(...list.map((subj) => el('tr', {},
+    el('td', {}, el('input', { class: 'field', type: 'text', value: subj.subject, 'aria-label': '과목명', placeholder: '과목명',
+      onInput: (e) => { subj.subject = e.target.value; persist(); } })),
+    el('td', {}, el('select', { class: 'field', 'aria-label': '교과군', onChange: (e) => { subj.group = e.target.value; persist(); } },
+      GROUPS.map((g) => el('option', { selected: g === subj.group }, g)))),
+    el('td', {}, el('input', { class: 'field credits tabular', type: 'number', min: 1, max: 10, value: subj.credits, 'aria-label': '학점',
+      onInput: (e) => { subj.credits = parseInt(e.target.value, 10); persist(); } })),
+    el('td', {}, gradeButtons(subj)),
+    el('td', {}, el('select', { class: 'field', 'aria-label': '성취도', onChange: (e) => { subj.achievement = e.target.value || null; persist(); } },
+      ACHIEVEMENTS.map((a) => el('option', { value: a, selected: (subj.achievement || '') === a }, a || '–')))),
+    el('td', {}, el('button', { type: 'button', class: 'icon-btn', 'aria-label': `${subj.subject || '과목'} 삭제`,
+      onClick: () => { profile.subjects.splice(profile.subjects.indexOf(subj), 1); persist(); render(); } }, '✕')))));
+}
+
+async function analyze() {
+  $('sem-title').textContent = `${semLabel(sem)} 평균`;
+  const subjects = validSubjects(profile.subjects);
+  if (subjects.length !== profile.subjects.length) showError('학점이 비어 있거나 1보다 작은 과목은 평균 계산에서 빠졌습니다.');
+  else showError('');
+  try {
+    const res = await api('/api/grades/analyze', { subjects });
+    const s = res.semesters[sem];
+    $('avg').textContent = s ? fmt(s['전과목'].avg) : '–';
+    $('formula').textContent = s && s['전과목'].avg !== null ? `계산식 ${s['전과목'].sum} ÷ ${s['전과목'].credits}` : '계산식 –';
+    $('avg-kems').textContent = s ? fmt(s['국영수사'].avg) : '–';
+    $('avg-kemc').textContent = s ? fmt(s['국영수과'].avg) : '–';
+  } catch (e) { showError(e.message); }
+}
+function scheduleAnalyze() { clearTimeout(timer); timer = setTimeout(analyze, 250); }
+
+function render() { renderTabs(); renderRows(); scheduleAnalyze(); }
+
+$('add').addEventListener('click', () => {
+  profile.subjects.push({ semester: sem, subject: '', group: '국어', credits: 4, grade: null, achievement: null });
+  persist(); render();
+});
+$('sample').addEventListener('click', async () => {
+  try {
+    const data = await api('/api/sample');
+    profile = { ...profile, subjects: data.subjects };
+    sem = data.subjects[0].semester; persist(); render();
+  } catch (e) { showError(e.message); }
+});
+$('csv').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const lines = (await file.text()).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+  const head = lines.shift().split(',');
+  const col = (name) => head.indexOf(name);
+  if (col('semester') < 0 || col('subject') < 0) { showError('CSV 머리글에 semester, subject, subject_group, credits, grade_5 가 있어야 합니다.'); return; }
+  profile.subjects = lines.map((l) => l.split(',')).map((c) => ({
+    semester: c[col('semester')], subject: c[col('subject')], group: c[col('subject_group')] || '기타',
+    credits: parseInt(c[col('credits')], 10), grade: c[col('grade_5')] ? parseInt(c[col('grade_5')], 10) : null,
+    achievement: c[col('achievement')] || null,
+  }));
+  sem = profile.subjects[0]?.semester || '1-1'; persist(); render(); e.target.value = '';
+});
+$('major').value = profile.major || '';
+$('field').value = profile.field || '';
+$('major').addEventListener('input', (e) => { profile.major = e.target.value; Store.save(profile); });
+$('field').addEventListener('change', (e) => { profile.field = e.target.value; Store.save(profile); });
+render();
+</script>
+</body>
+</html>

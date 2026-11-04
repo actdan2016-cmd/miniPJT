@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시나침반 · 성적 분석</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<div id="site-top"></div>
+<main class="wrap" id="main">
+  <div>
+    <h1>성적 분석</h1>
+    <p class="lead" id="lead">석차등급이 있는 과목만 학점 가중 평균</p>
+  </div>
+  <p class="error" id="msg" hidden></p>
+  <div id="content"></div>
+</main>
+
+<script>
+renderHeader('analysis.html');
+const $ = (id) => document.getElementById(id);
+const SCOPE_STYLE = { '전과목': { stroke: '#2650C0', dash: '' }, '국영수사': { stroke: '#B4561A', dash: '6 4' }, '국영수과': { stroke: '#18202B', dash: '2 5' } };
+const SCALE_COLORS = ['#142B6B', '#1E3D96', '#2650C0', '#5379D6', '#7F9BE2', '#AFC3F0', '#D2DDF7', '#E8EEFB'];
+
+function statCard(title, v, sub) {
+  return el('section', { class: 'card' }, el('h2', { class: 'stat-label' }, title),
+    el('div', { class: 'big' + (title.includes('전과목') ? ' primary' : ''), style: 'margin-top: 8px' }, fmt(v.avg)),
+    el('p', { class: 'small tabular', style: 'margin: 4px 0 0' }, sub));
+}
+
+// 학기별 평균 추이 (등급은 작을수록 좋으므로 위가 1등급)
+function trendChart(res) {
+  const W = 600, H = 260, L = 60, R = 580, T = 20, B = 220;
+  const x = (i) => L + 30 + i * ((R - L - 60) / (SEMESTERS.length - 1));
+  const y = (g) => T + (g - 1) / 4 * (B - T);
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': '학기별 평균 등급 추이' });
+  [1, 2, 3, 4, 5].forEach((g) => {
+    svg.append(svgEl('line', { x1: L, y1: y(g), x2: R, y2: y(g), stroke: '#EEF0F3' }));
+    svg.append(svgEl('text', { x: 12, y: y(g) + 4, 'font-size': 12, fill: '#5A6472' }, `${g}등급`));
+  });
+  SEMESTERS.forEach((s, i) => svg.append(svgEl('text', { x: x(i) - 10, y: 246, 'font-size': 12, fill: '#5A6472' }, s)));
+  const done = SEMESTERS.filter((s) => res.semesters[s] && res.semesters[s]['전과목'].avg !== null);
+  for (const [scope, st] of Object.entries(SCOPE_STYLE)) {
+    const pts = done.filter((s) => res.semesters[s][scope].avg !== null).map((s) => [x(SEMESTERS.indexOf(s)), y(res.semesters[s][scope].avg), res.semesters[s][scope].avg]);
+    if (pts.length > 1) svg.append(svgEl('polyline', { points: pts.map((p) => p.slice(0, 2).join(',')).join(' '), fill: 'none', stroke: st.stroke, 'stroke-width': 3, 'stroke-dasharray': st.dash || null }));
+    if (scope === '전과목') pts.forEach((p) => {
+      svg.append(svgEl('circle', { cx: p[0], cy: p[1], r: 5, fill: st.stroke }));
+      svg.append(svgEl('text', { x: p[0] + 6, y: p[1] - 10, 'font-size': 13, 'font-weight': 600, fill: st.stroke }, fmt(p[2])));
+    });
+  }
+  const lastIdx = done.length ? SEMESTERS.indexOf(done[done.length - 1]) : -1;
+  if (lastIdx < SEMESTERS.length - 1) {
+    const x0 = x(lastIdx + 1) - 30;
+    svg.append(svgEl('rect', { x: x0, y: T, width: R - x0, height: B - T, fill: '#F5F6F8', opacity: 0.7 }));
+    svg.append(svgEl('text', { x: x0 + (R - x0) / 2 - 60, y: (T + B) / 2, 'font-size': 13, fill: '#5A6472' }, '학기 성적 입력 후 표시'));
+  }
+  const legend = el('div', { class: 'legend' }, Object.entries(SCOPE_STYLE).map(([scope, st]) => el('span', {},
+    svgEl('svg', { width: 24, height: 8, 'aria-hidden': 'true' }, svgEl('line', { x1: 0, y1: 4, x2: 24, y2: 4, stroke: st.stroke, 'stroke-width': 3, 'stroke-dasharray': st.dash || null })), scope)));
+  return el('section', { class: 'card grow' }, el('h2', { style: 'margin-bottom: 4px' }, '학기별 평균 추이'),
+    el('p', { class: 'small', style: 'margin: 0 0 12px' }, '위로 갈수록 좋은 등급'), legend, svg);
+}
+
+// 교과군 × 학기 등급표 (입력한 원래 등급을 그대로 보여 준다)
+function heatTable(subjects) {
+  const sems = SEMESTERS.filter((s) => subjects.some((x) => x.semester === s));
+  const next = SEMESTERS[SEMESTERS.indexOf(sems[sems.length - 1]) + 1];
+  const cols = next ? [...sems, next] : sems;
+  const groups = GROUPS.filter((g) => subjects.some((x) => x.group === g));
+  const cell = (g, s) => {
+    const list = subjects.filter((x) => x.group === g && x.semester === s);
+    if (!list.length) return el('td', { class: 'g-empty' }, '–');
+    const graded = list.filter((x) => x.grade != null);
+    if (!graded.length) return el('td', { class: 'gx', title: list.map((x) => x.subject).join(', ') }, `${list.map((x) => x.achievement || '–').join('·')} · 제외`);
+    const worst = Math.max(...graded.map((x) => x.grade));
+    return el('td', { class: 'g' + worst, title: graded.map((x) => `${x.subject} ${x.grade}등급`).join(', ') }, graded.map((x) => x.grade).join('·'));
+  };
+  return el('section', { class: 'card', style: 'flex: 1 1 420px' }, el('h2', {}, '교과군 × 학기 등급'),
+    el('div', { class: 'table-scroll' }, el('table', { class: 'heat' },
+      el('thead', {}, el('tr', {}, el('th', { scope: 'col', style: 'text-align: left' }, '교과군'), cols.map((s) => el('th', { scope: 'col' }, s)))),
+      el('tbody', {}, groups.map((g) => el('tr', {}, el('th', { scope: 'row' }, g), cols.map((s) => cell(g, s))))))),
+    el('p', { class: 'small', style: 'margin: 8px 0 0' }, '주황 테두리 = 3등급 이하 과목 · "제외" = 석차등급이 없어 평균에서 뺀 과목'));
+}
+
+// 한눈에 보기: 추이(서버 계산)와 교과군별 등급 변화(입력값 비교)
+function insights(res, subjects) {
+  const items = [];
+  const t = res.trend;
+  if (t) {
+    const word = t.direction === '상승' ? '상승 추세' : t.direction === '하락' ? '하락 추세' : '유지';
+    const a = res.semesters[t.from]['전과목'].avg, b = res.semesters[t.to]['전과목'].avg;
+    items.push(el('li', { class: t.direction === '하락' ? 'warn' : '' }, el('strong', {}, word), ` · 전과목 평균 ${fmt(a)} → ${fmt(b)} (${t.from} → ${t.to})`));
+    for (const g of GROUPS) {
+      const one = (s) => { const l = subjects.filter((x) => x.group === g && x.semester === s && x.grade != null); return l.length === 1 ? l[0].grade : null; };
+      const p = one(t.from), q = one(t.to);
+      if (p === null || q === null) continue;
+      if (q < p) items.push(el('li', {}, el('strong', {}, `${g} 개선`), ` · ${p}등급 → ${q}등급`));
+      else if (q > p) items.push(el('li', { class: 'warn' }, el('strong', {}, `${g} 하락`), ` · ${p}등급 → ${q}등급`));
+      else if (p >= 3) items.push(el('li', { class: 'warn' }, el('strong', {}, `${g} 보강 필요`), ` · 두 학기 연속 ${p}등급`));
+    }
+  } else {
+    items.push(el('li', {}, '학기가 둘 이상 입력되면 추이를 보여 드립니다.'));
+  }
+  if (res.excluded_subjects.length) items.push(el('li', {}, el('strong', {}, '평균 제외'), ` · ${res.excluded_subjects.join(', ')} (석차등급 없음)`));
+  return el('section', { class: 'card', style: 'flex: 1 1 340px' }, el('h2', {}, '한눈에 보기'), el('ul', { class: 'insights' }, items));
+}
+
+// 9등급 환산 (과거 입결 비교용)
+function conversionCard(res) {
+  const all = res.cumulative['전과목'];
+  const g9 = all.grade9.grade9;
+  const left = Math.min(100, Math.max(0, (g9 - 1) / 8 * 100));
+  return el('section', { class: 'card', style: 'flex: 1 1 420px' },
+    el('h2', { style: 'margin-bottom: 4px' }, '9등급 환산 (과거 입결 비교용)'),
+    el('p', { class: 'small', style: 'margin: 0 0 20px' }, '5등급 중간 백분위 → 9등급 역보간 · 근사치'),
+    el('div', { class: 'scale' },
+      el('div', { class: 'marker', style: `left: ${left}%` }, el('b', {}, `전과목 ${fmt(g9)}`), el('i')),
+      el('div', { class: 'bar' }, SCALE_COLORS.map((c) => el('div', { style: `background: ${c}` }))),
+      el('div', { class: 'ticks tabular' }, [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => el('span', {}, String(n))))),
+    el('dl', { class: 'conv' }, Object.entries(res.cumulative).filter(([, v]) => v.grade9).flatMap(([scope, v]) => [
+      el('dt', {}, `${scope} ${fmt(v.avg)}`), el('dd', {}, `누적 약 ${Number(v.grade9.percentile).toFixed(1)}% → 9등급 약 ${fmt(v.grade9.grade9)}`)])),
+    el('p', { class: 'note', style: 'margin-top: 16px' }, '평균 등급은 백분위가 아니어서 정보 손실이 있습니다. 학생부종합처럼 정성평가 전형은 환산만으로 판단하기 어렵습니다.'),
+    el('span', { class: 'small', style: 'display: inline-flex; min-height: 44px; align-items: center; margin-top: 12px' }, '지원 가능 대학 화면은 다음 단계(A7)에서 연결됩니다.'));
+}
+
+async function main() {
+  const profile = Store.load() || emptyProfile();
+  const subjects = validSubjects(profile.subjects);
+  if (!subjects.some((x) => x.grade != null)) {
+    $('content').replaceChildren(el('div', { class: 'empty-state' }, el('p', {}, '아직 입력한 성적이 없습니다.'),
+      el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
+    return;
+  }
+  try {
+    const res = await api('/api/grades/analyze', { subjects });
+    const sems = Object.keys(res.semesters);
+    const all = res.cumulative['전과목'];
+    $('lead').textContent = `${sems.map(semLabel).join('·')} 누적 · 석차등급이 있는 과목만 학점 가중 평균`;
+    const trendText = sems.map((s) => `${s} ${fmt(res.semesters[s]['전과목'].avg)}`).join(' → ');
+    $('content').replaceChildren(el('div', { style: 'display: flex; flex-direction: column; gap: 24px' },
+      el('div', { class: 'grid-cards' },
+        statCard('누적 평균 · 전과목', all, `${all.formula} · ${trendText}`),
+        statCard('국영수사', res.cumulative['국영수사'], res.cumulative['국영수사'].formula),
+        statCard('국영수과', res.cumulative['국영수과'], res.cumulative['국영수과'].formula)),
+      el('div', { class: 'row stretch' }, trendChart(res), insights(res, subjects)),
+      el('div', { class: 'row stretch' }, heatTable(subjects), conversionCard(res)),
+      el('p', { class: 'small', style: 'margin: 0' }, res.notes.join(' '))));
+  } catch (e) { $('msg').textContent = e.message; $('msg').hidden = false; }
+}
+main();
+</script>
+</body>
+</html>
