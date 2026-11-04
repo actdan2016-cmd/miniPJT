@@ -214,7 +214,8 @@ def check_output(text: str, allowed_text: str) -> list[str]:
 def finalize(summary: str, tool_results: list[tuple[str, dict]], allowed_text: str) -> tuple[str, dict]:
     """LLM 요약 + 코드 결과표 + 고지를 합쳐 최종 답변을 만든다. 반환: (답변, trace용 검사 정보)"""
     tables = render_tables(tool_results)
-    violations = check_output(summary, allowed_text)
+    # 결과표도 도구 결과로 코드가 그린 것이므로, 표에 보이는 값(예: 학점 비중 17.4%)을 요약에 옮겨 써도 근거가 있다
+    violations = check_output(summary, f"{allowed_text}\n{tables}")
     if violations:
         body = f"{OUTPUT_TABLE_ONLY}\n\n{tables}" if tables else OUTPUT_FALLBACK
     else:

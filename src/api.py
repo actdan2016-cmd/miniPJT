@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from src import data_store as ds
 from src.agent import ask, build_agent, open_checkpointer, resume
 from src.guardrails import finalize
-from src.middleware import mask_pii
+from src.middleware import GUIDE_KINDS, mask_pii
 from src.tools import (GpaInput, SimulateInput, SubjectGrade, save_student_profile, calc_school_gpa, classify_chances, get_recommended_courses,
                        simulate_improvement)
 
@@ -156,7 +156,8 @@ def _contexts_and_trace(question: str, messages: list, answer: str) -> tuple[lis
     final = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
     meta = (final.response_metadata or {}) if final else {}
     if final is not None and final.name == "input_guard":
-        trace.append({"step": "input_guard", "input": {"rule": meta.get("guard")}, "output": "차단: 모델 호출 없이 고정 문구로 응답"})
+        trace.append({"step": "input_guard", "input": {"rule": meta.get("guard")}, "output": ("안내: 모델 호출 없이 되묻기·대안 문구로 응답" if meta.get("guard") in GUIDE_KINDS
+                                 else "차단: 모델 호출 없이 고정 문구로 응답")})
     trace.append({"step": "answer", "input": {"model": meta.get("model_name")}, "output": answer[:500]})
     return contexts, trace
 

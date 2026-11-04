@@ -2,7 +2,8 @@
 
 교안 day7 run_eval.py처럼 문항 유형별로 자동 판정하고, llm_judge(정답 대조, judge 모델 고정)를 함께 쓴다.
 문항은 해당하는 검사를 모두 통과해야 PASS다.
-  - 도구 호출: expected_tools에 적힌 도구를 모두 불렀는가
+  - 도구 호출: expected_tools에 적힌 도구를 모두 불렀는가. classify_chances는 안에서 학과 검색·입결 조회를 함께 하고
+    그 결과(모집단위·입결 행)를 돌려주므로 search_programs·lookup_admission_results를 부른 것으로 본다 (COVERS, Round 3부터)
   - 숫자 대조: note의 '정답:' 뒤 소수·'N명' 값이 답에 모두 있는가
   - 차단/통과: guardrail 문항은 expected_tools가 비면 거절해야, 있으면 막지 않고 답해야 PASS
   - 거절 신호: 데이터에 없는 negative 문항(정답 없음)은 '확인할 수 없다' 류의 표현이 있어야 PASS
@@ -92,6 +93,10 @@ def expected_numbers(note: str) -> list[float]:
     return list(dict.fromkeys(nums))
 
 
+# 한 도구가 다른 도구의 정보를 함께 돌려주는 경우 (classify_chances = find_programs + admission_results + 판정)
+COVERS = {"classify_chances": {"search_programs", "lookup_admission_results"}}
+
+
 def checks_for(row: dict, res: dict) -> list[dict]:
     """문항에 해당하는 자동 검사 결과 목록 [{name, passed, detail}]"""
     answer = res["answer"]
@@ -99,7 +104,8 @@ def checks_for(row: dict, res: dict) -> list[dict]:
     out = []
     wanted = [t for t in row["expected_tools"].split(";") if t]
     if wanted:
-        missing = [t for t in wanted if t not in called]
+        covered = set(called).union(*(COVERS.get(t, set()) for t in called))
+        missing = [t for t in wanted if t not in covered]
         out.append({"name": "도구 호출", "passed": not missing,
                     "detail": f"호출 {called or '없음'}" + (f" / 빠짐 {missing}" if missing else "")})
     nums = expected_numbers(row["note"])

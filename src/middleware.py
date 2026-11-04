@@ -15,7 +15,8 @@ import re
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.replies import REFUSALS
+from src import grades
+from src.replies import FUTURE_GRADE, REFUSALS, clarify_scale
 
 RULES: dict[str, list[str]] = {
     "injection": [
@@ -49,6 +50,31 @@ def match_rule(text: str) -> str | None:
     for kind, patterns in _COMPILED.items():
         if any(p.search(text) for p in patterns):
             return kind
+    return None
+
+
+GUIDE_KINDS = {"future_grade", "clarify_scale"}
+FUTURE_GRADE_RE = re.compile(r"(등급|성적).{0,10}(몇|어떻게).{0,6}(나올지|나올까|받을지)|(등급|성적).{0,15}예측해")
+AVG_RE = re.compile(r"(\d(?:\.\d+)?)\s*등급")
+WHERE_RE = re.compile(r"어디|어느 대학|갈 수|지원할|지원 가능")
+SCALE_RE = re.compile(r"[59]\s*등급\s*제|[59]등급(제|으로|기준)|(5|9)\s*등급 ?체계")
+
+
+def match_guide(text: str, history: str) -> tuple[str, str] | None:
+    """거절이 아니라 되묻기·대안 안내로 끝낼 질문이면 (종류, 문구)를 돌려준다.
+
+    - future_grade: 앞으로 받을 개별 과목 등급 예측 요청 (평가 25)
+    - clarify_scale: '내신 3.5등급인데 어디 가?'처럼 등급 체계 없이 평균만 준 지원 가능 질문 (평가 16).
+      앞 대화에서 5·9등급제를 이미 밝혔으면 묻지 않는다.
+    """
+    if FUTURE_GRADE_RE.search(text):
+        return "future_grade", FUTURE_GRADE
+    found = AVG_RE.findall(text)
+    m = AVG_RE.search(text) if len(found) == 1 else None  # 과목별 등급을 여러 개 준 질문(평가 13)은 모델이 누락 과목을 되묻는다
+    if m and WHERE_RE.search(text) and not SCALE_RE.search(history):
+        avg = float(m.group(1))
+        g9 = grades.convert_5to9(avg)["grade9"] if 1 <= avg <= 5 else None
+        return "clarify_scale", clarify_scale(avg, g9)
     return None
 
 
@@ -107,11 +133,18 @@ class InputRuleMiddleware(AgentMiddleware):
         messages = request.state["messages"]
         if not messages or not isinstance(messages[-1], HumanMessage):
             return None  # 도구 결과를 받은 뒤의 호출은 이미 검사를 통과한 질문이다
-        kind = match_rule(_text(messages[-1]))
-        if kind is None:
-            return None
+        text = _text(messages[-1])
+        kind = match_rule(text)
+        if kind is not None:
+            content = REFUSALS[kind]
+        else:
+            history = "\n".join(_text(m) for m in messages if isinstance(m, HumanMessage))
+            guide = match_guide(text, history)
+            if guide is None:
+                return None
+            kind, content = guide
         # name·response_metadata로 차단 사실과 규칙 종류를 trace에 남긴다 (사용자 답변에는 사유를 보이지 않음)
-        return AIMessage(content=REFUSALS[kind], name="input_guard", response_metadata={"guard": kind})
+        return AIMessage(content=content, name="input_guard", response_metadata={"guard": kind})
 
     def wrap_model_call(self, request, handler):
         refusal = self._refusal_or_none(request)
