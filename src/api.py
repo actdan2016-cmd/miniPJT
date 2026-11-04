@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from src import data_store as ds
 from src.agent import ask, build_agent, open_checkpointer
+from src.guardrails import finalize
 from src.middleware import mask_pii
 from src.tools import GpaInput, calc_school_gpa, classify_chances
 
@@ -122,6 +123,18 @@ def _contexts_and_trace(question: str, messages: list, answer: str) -> tuple[lis
     return contexts, trace
 
 
+def _tool_results(messages: list) -> list[tuple[str, dict]]:
+    """이번 턴의 (도구 이름, 결과 dict) 목록"""
+    names = {c["id"]: c["name"] for m in messages if isinstance(m, AIMessage) for c in (m.tool_calls or [])}
+    out = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            result = _load(m.content)
+            if result is not None:
+                out.append((names.get(m.tool_call_id, m.name or ""), result))
+    return out
+
+
 def _call(tool, args: dict) -> dict:
     """도구를 호출하고, 입력 오류는 400으로 돌려준다."""
     try:
@@ -163,9 +176,21 @@ def query(req: QueryRequest) -> dict:
     thread_id = req.thread_id or uuid.uuid4().hex
     start = time.time()
     out = ask(_agent(), req.question, thread_id)
-    contexts, trace = _contexts_and_trace(req.question, out["messages"], out["answer"])
+    messages = out["messages"]
+    blocked = any(isinstance(m, AIMessage) and m.name == "input_guard" for m in messages)
+    guard = None
+    answer = out["answer"]
+    if not blocked:
+        # LLM 요약 + 코드 결과표 + 고지. 요약에 위반이 있으면 결과표만 보여 준다 (guardrails.finalize)
+        allowed = mask_pii(req.question)[0] + "\n" + "\n".join(str(m.content) for m in messages if isinstance(m, ToolMessage))
+        answer, guard = finalize(out["answer"], _tool_results(messages), allowed)
+    contexts, trace = _contexts_and_trace(req.question, messages, answer)
+    if guard is not None:
+        trace.insert(len(trace) - 1, {"step": "output_guard", "input": {"tables": guard["tables"]},
+                                      "output": "위반 없음" if not guard["violations"]
+                                      else f"위반 {guard['violations']} → 요약을 빼고 결과표만 표시"})
     trace.append({"step": "total", "input": {"thread_id": thread_id}, "output": f"{time.time() - start:.1f}초"})
-    return {"answer": out["answer"], "contexts": contexts, "trace": trace, "thread_id": thread_id}
+    return {"answer": answer, "contexts": contexts, "trace": trace, "thread_id": thread_id}
 
 
 # 화면 파일은 API 경로 뒤에 붙인다. web/ 이 아직 없으면 안내만 돌려준다
