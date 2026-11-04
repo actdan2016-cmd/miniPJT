@@ -35,7 +35,7 @@
 - 설계 원칙: **계산·환산·분류는 코드(`src/grades.py` 순수 함수), LLM은 설명만.** 위험 요청은 `before_model` 규칙으로 모델 호출 전 차단, 숫자 표는 도구 결과로 코드가 렌더링. 모듈 구성·진입점은 `docs/ARCHITECTURE.md`를 따른다
 - README는 강사 리뷰 형식(한 줄 요약·제출자 설명·아키텍처·눈에 띄는 점·진입점)을 유지하고, 평가 결과 숫자는 README와 `evaluation/roundN_report.md`를 일치시킨다
 - 에이전트는 실습과 같은 `create_agent` + `AgentMiddleware` + `ChatBedrockConverse` + `SqliteSaver` 구성 (`day5_practice` 참고)
-- 웹서비스: Python FastAPI 백엔드 — 상담 챗은 `POST /query`(에이전트), 계산·조회 화면은 `/api/*`(도구 직접 호출). 화면은 Claude Design으로 별도 개발 (`docs/SCREEN_SPEC.md`)
+- 웹서비스: Python FastAPI 백엔드 — 상담 챗은 `POST /query`(에이전트), 계산·조회 화면은 `/api/*`(도구 직접 호출). 화면은 Claude Design 캔버스 「입시나침반 화면 디자인」(화면 6개) 시안을 `web/`의 정적 HTML+JS로 옮겨 FastAPI가 함께 띄운다(새 프론트엔드 라이브러리 없음). 개발 중 각 작업은 브라우저 화면에서 동작을 확인한다 (`docs/SCREEN_SPEC.md`)
 - 스택은 이 폴더 `requirements.txt` 기준: LangChain/LangGraph, AWS Bedrock(langchain-aws), Chroma + BM25(kiwipiepy) 하이브리드 검색, FastAPI
 - 출발점 코드: 교안 실습 `day1_practice`~`day7_practice` (평가·트레이스는 `day7_practice`)
 - 개발 순서: 평가 셋(`evaluation/test_queries.csv`) 확정 → `TASKS.md` 작업을 Plan 모드로 하나씩 계획 승인 → 1차 도구 3개(SERVICE.md §3-1) → 채점 기준선 → 한 번에 하나씩 고치는 루프
@@ -55,6 +55,7 @@
 | `src/guardrails.py` | 출력 가드레일, 결과표 렌더링 |
 | `src/replies.py` | 고정 응답 문구 |
 | `tests/test_grades.py` | `grades.py` 단위 테스트 |
+| `web/*.html`, `web/app.js`, `web/style.css` | 화면 6개(성적 입력·분석·지원 가능 대학·보강 과목·로드맵·상담)와 공통 스크립트·스타일 |
 | `evaluation/run_eval.py` | 평가셋 실행·채점·RAGAS |
 
 ## 코드 규칙

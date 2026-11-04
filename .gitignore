@@ -4,4 +4,15 @@ data/raw/**/*.xlsx
 data/raw/**/*.hwp
 # 자녀 학교명·교육과정 등 개인 정보
 data/private/
+# 비밀 값 (AWS 자격 증명 등) — 절대 커밋하지 않는다
 .env
+.env.*
+# 실행 중 생기는 파일
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+chroma_db/
+*.sqlite
+*.sqlite3
+*.db
