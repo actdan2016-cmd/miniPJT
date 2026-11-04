@@ -132,8 +132,7 @@ function contextTitle(c) {
   if (c.doc_id.includes('lookup_admission_results')) return '입결 조회 결과';
   const univ = (c.text.split('\n')[0] || '').split(' ')[0];
   const year = (c.text.match(/(\d{4})학년도/) || [])[1];
-  const src = c.doc_id.startsWith('어디가') ? '어디가(대입정보포털)' : c.doc_id.startsWith('전문대학포털') ? '전문대학포털' : c.doc_id;
-  return `${univ}${year ? ` ${year}학년도` : ''} 입시결과 · 출처: ${src}`;
+  return `${univ}${year ? ` ${year}학년도` : ''} 입시결과 · 출처: ${friendlySource(c.doc_id)}`;
 }
 
 function contextList(contexts) {
@@ -142,9 +141,8 @@ function contextList(contexts) {
     contexts.map((c) => {
       const lines = c.text.split('\n').filter(Boolean);
       return el('details', { class: 'ctx-item' },
-        el('summary', {}, contextTitle(c), lines.length > 1 ? el('span', { class: 'small' }, ` ${lines.length}건`) : null),
-        el('ul', {}, lines.map((l) => el('li', {}, l))),
-        el('p', { class: 'small', style: 'margin: 6px 0 0' }, `원본 출처: ${c.doc_id}`));
+        el('summary', { title: c.doc_id }, contextTitle(c), lines.length > 1 ? el('span', { class: 'small' }, ` ${lines.length}건`) : null),
+        el('ul', {}, lines.map((l) => el('li', {}, l))));
     }));
 }
 

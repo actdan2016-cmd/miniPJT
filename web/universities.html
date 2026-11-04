@@ -101,7 +101,7 @@ function card(x) {
         el('span', { class: 'small', style: 'margin-left: 6px' }, `(${gapText(x.gap)})`))),
     x.cut_min !== null && x.cut_min !== undefined ? el('p', { class: 'small' }, `합격자 최저 ${fmt(x.cut_min)}`) : null,
     tags.map((t) => el('span', { class: 'tag' }, t)),
-    el('p', { class: 'small' }, `출처: ${x.source_doc}`));
+    el('p', { class: 'small', title: x.source_doc }, `출처: ${friendlySource(x.source_doc, x.year)}`));
 }
 
 function listTable(rows, cols) {
@@ -126,14 +126,14 @@ function board(title, sub, items) {
     el('h2', {}, `격차 큼 ${gap.length} · 컷까지 1등급 넘게 차이`),
     el('p', { class: 'small', style: 'margin: -4px 0 12px' }, '숨기지 않고 보여 드립니다. 보강 과목(What-if) 화면에서 컷까지 줄이는 방법을 볼 수 있습니다.'),
     listTable(gap, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
-      ['기준선', (x) => `${fmt(x.cut)} (${x.basis})`], ['컷까지', (x) => gapText(x.gap)], ['출처', (x) => x.source_doc]])));
+      ['기준선', (x) => `${fmt(x.cut)} (${x.basis})`], ['컷까지', (x) => gapText(x.gap)], ['출처', (x) => friendlySource(x.source_doc, x.year)]])));
   if (hidden.length) parts.push(el('section', { class: 'card' }, el('h2', {}, `입결 미공개 ${hidden.length}`),
     listTable(hidden, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)], ['사유', (x) => x.reason]])));
   if (ref.length) parts.push(el('details', { class: 'card more' },
     el('summary', {}, `학생부종합 참고치 ${ref.length} · 판정 없음`),
     el('p', { class: 'small', style: 'margin: 0 0 12px' }, '정성평가 전형이라 등급만으로 판단하지 않습니다. 합격자 내신(9등급)만 참고로 보여 드립니다.'),
     listTable(ref, [['대학', (x) => x.univ_name], ['모집단위', (x) => x.unit_name], ['전형', (x) => shortTrack(x.track_name)],
-      ['합격자 내신', (x) => `${fmt(x.cut)}${x.basis ? ` (${x.basis})` : ''}`], ['출처', (x) => x.source_doc]])));
+      ['합격자 내신', (x) => `${fmt(x.cut)}${x.basis ? ` (${x.basis})` : ''}`], ['출처', (x) => friendlySource(x.source_doc, x.year)]])));
   return el('div', { class: 'board' }, parts);
 }
 

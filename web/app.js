@@ -50,6 +50,16 @@ function renderHeader(current) {
     el('div', { class: 'disclaimer' }, el('div', { class: 'wrap' }, DISCLAIMER)));
 }
 
+/** 출처 원문(내부 검증용: unvCd 등 포함)을 화면용 쉬운 문구로 바꾼다. 원문은 title 속성으로만 남긴다. */
+function friendlySource(src, year) {
+  if (!src) return '';
+  const y = year ? ` · ${year}학년도 입시결과` : '';
+  if (src.startsWith('어디가')) return `어디가(대입정보포털)${y}`;
+  if (src.startsWith('전문대학포털')) return `전문대학포털${y}`;
+  if (src.includes('입학처 발표')) return `${src.split(' ')[0]} 입학처 발표${y}`;
+  return src.replace(/\s*\(.*\)\s*$/, '');
+}
+
 /** 공통 로딩 표시(스피너). elapsed=true면 경과 초를 함께 보여 준다. 화면에서 빠지면 타이머도 멈춘다. */
 function spinner(text, { elapsed = false } = {}) {
   const sec = el('span', { class: 'loading-sec tabular' });
