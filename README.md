@@ -64,27 +64,28 @@ pip install -r requirements.txt
 5. 테스트: `pytest tests/test_grades.py` · 평가: `python -m evaluation.run_eval --round 2 --ragas`
 
 ## RAGAS 평가 결과
-정답(reference)이 있는 5문항(4·10·12·24·26, `evaluation/ragas_references.csv`)을 Round 3 코드로 따로 쟀습니다(2026-11-05, [리포트](evaluation/round3_ragas.md)). 판정 LLM은 judge와 같은 `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, 임베딩은 Titan v2입니다. **네 지표 모두 목표에 못 미쳤습니다.**
+정답(reference)이 있는 5문항(4·10·12·24·26, `evaluation/ragas_references.csv`)에 4개 지표를 계산했습니다. 판정 LLM은 judge와 같은 `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, 임베딩은 Titan v2입니다. **네 지표 모두 목표에 못 미쳤습니다.**
 
-| 지표 | 평균 | 목표 (SERVICE.md §5) |
-|---|---|---|
-| faithfulness | 0.308 | ≥ 0.85 ✘ |
-| answer_relevancy | 0.338 | ≥ 0.80 ✘ |
-| context_recall | 0.533 | ≥ 0.75 ✘ |
-| context_precision | 0.517 | ≥ 0.70 ✘ |
+| 지표 | Round 3 코드 ([5문항](evaluation/round3_ragas.md)) | **Round 4** ([리포트](evaluation/round4_report.md)) | 목표 (SERVICE.md §5) |
+|---|---|---|---|
+| faithfulness | 0.308 | **0.380** | ≥ 0.85 ✘ |
+| answer_relevancy | 0.338 | **0.315** | ≥ 0.80 ✘ |
+| context_recall | 0.533 | **0.617** | ≥ 0.75 ✘ |
+| context_precision | 0.517 | **0.624** | ≥ 0.70 ✘ |
 
-| id | faithfulness | answer_relevancy | context_recall | context_precision |
+| id (Round 4) | faithfulness | answer_relevancy | context_recall | context_precision |
 |---|---|---|---|---|
-| 4 | 0.100 | 0.360 | 1.000 | 0.583 |
-| 10 | 0.182 | 0.473 | 0.000 | 1.000 |
-| 12 | 0.455 | 0.477 | 1.000 | 1.000 |
-| 24 | 0.333 | 0.000 | 0.000 | 0.000 |
-| 26 | 0.471 | 0.380 | 0.667 | 0.000 |
+| 4 | 0.182 | 0.327 | 1.000 | 0.583 |
+| 10 | 0.417 | 0.000 | 0.000 | 0.950 |
+| 12 | 0.000 | 0.000 | 1.000 | 1.000 |
+| 24 | 0.636 | 0.852 | 0.750 | 0.585 |
+| 26 | 0.667 | 0.398 | 0.333 | 0.000 |
 
-- **faithfulness가 낮은 이유:** 답변 끝에 코드가 붙이는 고정 안내("2029학년도 시행계획은 2027년 4~5월 공개 예정", "합격을 보장하지 않습니다" 등)는 검색 문서에 없는 문장이라 근거 없는 주장으로 셉니다. 4번은 judge 5점(정답)인데 faithfulness 0.10입니다. 고정 안내를 빼고 재거나 contexts에 안내 문구 출처를 넣어야 실제 환각 정도를 볼 수 있습니다.
-- **24번 context_recall 0:** "전문대 간호학과 내신 반영" 질문에 검색이 4년제 시행계획 청크만 가져와, 넣어 둔 수원과학대·광주보건대·경민대 시행계획을 찾지 못했습니다. 답도 "전문대 자료가 없다"고 했습니다. 대학 유형 필터나 '전문대' 질의 확장이 필요합니다.
-- **10번 context_recall 0:** PDF 표가 텍스트로 풀리며 모집인원 17명이 사라져 정답 근거가 검색 결과에 없습니다(아래 남은 실패와 같은 원인).
-- 처음 두 번(Round 2·3 본 채점)은 RAGAS 기본 동시 16개 호출이 Bedrock 처리량 제한에 걸려 `TimeoutError`(nan)가 났고, 동시 2개·600초(`RunConfig`)로 줄인 뒤 일일 토큰 한도가 풀리고 나서 쟀습니다.
+- **24번 개선 (Round 3 → 4):** 검색이 전문대 문서를 못 찾았습니다(context_recall 0). 원인은 두 가지였습니다. 모델이 `univ_name`에 문자열 `'null'`을 넘겼고, 청크 본문에 '전문대'라는 말이 없어 4년제 문서가 상위를 차지했습니다. 그래서 `retrieve_admission_docs`에 `univ_type`(전문대·4년제) 필터를 넣고, 대학마다 2개 청크까지만 담도록 바꿨습니다. 그 결과 recall 0 → 0.75, faithfulness 0.333 → 0.636으로 올랐고 문항도 PASS가 됐습니다.
+- **faithfulness가 낮은 이유:** 답변 끝에 코드가 붙이는 고정 안내("2029학년도 시행계획은 2027년 4~5월 공개 예정", "합격을 보장하지 않습니다")는 검색 문서에 없는 문장이라 근거 없는 주장으로 셉니다. 4번은 judge 5점(정답)인데 faithfulness 0.18입니다.
+- **12번 0.000:** Round 4 실행에서 출력 검사가 요약을 막아 대체 문구만 나갔기 때문입니다(아래 Round 4 설명).
+- **10번 context_recall 0:** PDF 표가 텍스트로 풀리며 모집인원 17명이 사라져 정답 근거가 검색 결과에 없습니다.
+- 첫 측정(Round 2·3 본 채점)은 RAGAS 기본 동시 16개 호출이 Bedrock 처리량 제한에 걸려 `TimeoutError`(nan)가 났습니다. 동시 2개·600초(`RunConfig`)로 줄이고, 일일 토큰 한도가 풀린 뒤 쟀습니다.
 
 ## 인-아웃 세트 통과율 (자체 평가)
 평가셋 28건(positive 11 · negative 5 · edge 7 · guardrail 5). 문항마다 해당 검사(도구 호출, 숫자 대조, 차단/통과, 거절 신호, llm_judge 의미 판정)를 **모두** 통과해야 PASS입니다. judge는 `us.anthropic.claude-sonnet-4-5-20250929-v1:0`(temperature 0)로 고정했습니다.
@@ -94,6 +95,7 @@ pip install -r requirements.txt
 | [Round 1](evaluation/round1_report.md) | 7/28 (25%) | 5 | 2 | 기준선: 에이전트 + 도구만 |
 | [Round 2](evaluation/round2_report.md) | 13/28 (46%) | 9 | 4 | 모델 호출 전 규칙 차단, 개인정보 마스킹, 결과표 코드 렌더링 + 요약 검사, 학과 키워드 매칭 수정, RAG·What-if 도구 |
 | [Round 3](evaluation/round3_report.md) | **19/28 (68%)** | 15 | 4 | 되묻기·대안 입력 규칙(16·25), 결과표 숫자를 요약 근거로 인정(23), 프롬프트 보강, 채점 기준 1건 수정(아래) |
+| [Round 4](evaluation/round4_report.md) | 19/28 (68%) | 15 | 4 | 문서 검색 `univ_type` 필터·대학별 분산(24 통과). 6·12는 출력 검사가 요약을 막아 FAIL(검색과 무관) |
 
 - Round 3 llm_judge 의미 판정은 24/28, 평균 4.50/5입니다. 실패 9건 중 4건(11·12·23·28)은 judge 5점이고 자동 검사(도구 호출·거절 신호)만 못 넘었습니다.
 - 안전 4/5: 차단해야 할 4건(보장 문구·타 학생·대리 작성·인젝션)은 모두 막았습니다. 남은 1건(28, 전문대 비하 질문)은 막지 않고 중립적으로 답해 judge 5점이지만, 기대 도구(`search_programs`)를 부르지 않아 FAIL입니다.
@@ -107,7 +109,8 @@ pip install -r requirements.txt
 - **API 한도를 설계에 넣어야 했다.** Bedrock `ThrottlingException`이 채점 중 반복돼 `with_retry`, us → global → sonnet-4-6 대체 모델, 채점 동시 실행 2개로 버텼습니다. RAGAS는 일일 토큰 한도 때문에 한도가 풀린 다음 날 따로 쟀습니다.
 - **남은 실패와 원인**
   - 10번: PDF 모집인원 표가 텍스트로 풀리며 칸이 뭉개져 인하대 간호 지역균형 17명을 1명으로 읽었습니다. 표를 구조화해 CSV로 넣어야 합니다.
-  - 12번: 답은 맞지만(judge 5점), '확인할 수 없다'류 문구를 찾는 거절 신호 검사가 잘못된 전제를 바로잡는 문항에는 맞지 않습니다.
+  - 12번: 답은 맞지만(Round 3 judge 5점), '확인할 수 없다'류 문구를 찾는 거절 신호 검사가 잘못된 전제를 바로잡는 문항에는 맞지 않습니다.
+  - 6·12번(Round 4): 출력 검사(문서에 없는 소수 차단)가 요약을 막아 표만 나가거나 대체 문구가 나갔습니다. 같은 질문을 다시 돌리면 위반 없이 정답이 나오므로, 모델 출력이 흔들리는 데 검사가 엄격하게 걸리는 것입니다. 날짜·버전 같은 숫자를 소수로 오인하지 않게 검사를 다듬어야 합니다.
   - 27번: 학기 평균만 주면 과목별 등급이 필요한 `calc_school_gpa`를 쓸 수 없어 누적 2.4를 계산하지 못했습니다.
 
 ## 진입점 · 핵심 코드 위치

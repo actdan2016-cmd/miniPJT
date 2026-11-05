@@ -99,8 +99,8 @@ def _store() -> Chroma:
 
 
 @lru_cache(maxsize=64)
-def _bm25(univ: str | None) -> BM25Retriever | None:
-    docs = [d for d in load_chunks() if univ is None or d.metadata["univ"] == univ]
+def _bm25(univs: tuple[str, ...] | None) -> BM25Retriever | None:
+    docs = [d for d in load_chunks() if univs is None or d.metadata["univ"] in univs]
     if not docs:
         return None
     r = BM25Retriever.from_documents(docs, preprocess_func=korean_tokenizer)
@@ -122,11 +122,16 @@ def match_univ(name: str | None) -> str | None:
     return min(cands, key=len) if cands else None
 
 
-def search(query: str, univ: str | None = None, k: int = 5) -> list[Document]:
-    """하이브리드 검색. univ(문서 이름의 대학 부분)를 주면 그 대학 문서만 본다."""
-    where = {"univ": univ} if univ else None
+def search(query: str, univ: str | list[str] | None = None, k: int = 5, per_univ: int | None = None) -> list[Document]:
+    """하이브리드 검색. univ(문서 이름의 대학 부분, 여럿이면 목록)를 주면 그 대학 문서만 본다.
+
+    per_univ: 대학마다 최대 몇 청크까지 담을지. '전문대 간호는 내신을 어떻게 반영해?'처럼 여러 대학을 묻는 질문에서
+    한 대학 문서가 상위를 독차지하지 않게 한다.
+    """
+    univs = (univ,) if isinstance(univ, str) else tuple(sorted(univ)) if univ else None
+    where = None if not univs else {"univ": univs[0]} if len(univs) == 1 else {"univ": {"$in": list(univs)}}
     vec = _store().similarity_search(query, k=20, filter=where)
-    bm = _bm25(univ)
+    bm = _bm25(univs)
     lex = bm.invoke(query) if bm else []
     scores, docs = {}, {}
     for name, ranked in (("vector", vec), ("bm25", lex)):
@@ -134,8 +139,16 @@ def search(query: str, univ: str | None = None, k: int = 5) -> list[Document]:
             cid = d.metadata["chunk_id"]
             scores[cid] = scores.get(cid, 0.0) + WEIGHTS[name] / (RRF_K + rank + 1)
             docs.setdefault(cid, d)
-    top = sorted(scores, key=scores.get, reverse=True)[:k]
-    return [docs[c] for c in top]
+    top, count = [], {}
+    for cid in sorted(scores, key=scores.get, reverse=True):
+        u = docs[cid].metadata["univ"]
+        if per_univ and count.get(u, 0) >= per_univ:
+            continue
+        count[u] = count.get(u, 0) + 1
+        top.append(docs[cid])
+        if len(top) == k:
+            break
+    return top
 
 
 if __name__ == "__main__":

@@ -184,18 +184,28 @@ def convert_grade_5to9(avg5: float) -> dict:
 
 # ---------- retrieve_admission_docs (2차) ----------
 @tool("retrieve_admission_docs")
-def retrieve_admission_docs(query: str, univ_name: str | None = None) -> dict:
+def retrieve_admission_docs(query: str, univ_name: str | None = None,
+                            univ_type: Literal["4년제", "전문대"] | None = None) -> dict:
     """대학 시행계획·모집요강·교육부 대입개편 문서에서 근거 문장을 찾을 때 쓴다.
 
     수능최저학력기준, 학생부 반영 방법(반영 학기·과목·성취도), 모집인원, 전형 방법·차이, 2028 수능 체제 같은 '문서에 적힌 규칙'을 물을 때 쓴다.
     univ_name: 대학명('한양대', '동남보건대'). 대입 제도 전반(2028 수능 등)은 univ_name='교육부'. 비우면 전체 문서에서 찾는다.
+    univ_type: 특정 대학이 아니라 '전문대 간호는 내신을 어떻게 반영해?'처럼 유형 전체를 물을 때 '전문대' 또는 '4년제'.
+      그 유형 대학 문서에서만 찾고, 대학마다 2개 청크까지 담아 여러 대학을 비교할 수 있게 한다.
     결과마다 문서명·학년도·쪽이 붙으므로 답변에 그대로 인용한다.
     """
+    if univ_name in ("null", "None", "none", ""):  # 모델이 빈 값을 문자열로 넘기는 경우 (평가 24)
+        univ_name = None
+    if univ_type is None and univ_name is None and "전문대" in query:
+        univ_type = "전문대"  # 청크 본문에 '전문대'라는 말이 없어 유형 이름만으로는 4년제 문서가 상위를 차지한다
     univ = retriever.match_univ(univ_name) if univ_name else None
     if univ_name and univ is None:
         return {"found": False, "message": f"'{univ_name}'의 시행계획 문서는 수집하지 않았습니다. 대학 입학처나 어디가(adiga.kr)에서 확인해 주세요.",
                 "results": []}
-    docs = retriever.search(query, univ=univ, k=5)
+    if univ is None and univ_type:
+        typed = {retriever.match_univ(u["univ_name"]) for u in ds.universities().values() if u["univ_type"] == univ_type}
+        univ = sorted(typed - {None}) or None
+    docs = retriever.search(query, univ=univ, k=6 if isinstance(univ, list) else 5, per_univ=2 if isinstance(univ, list) else None)
     return {"found": bool(docs), "univ": univ,
             "results": [{"source": d.metadata["source"], "year": d.metadata["year"], "page": d.metadata["page"],
                          "text": d.page_content} for d in docs],

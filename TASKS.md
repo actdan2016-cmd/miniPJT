@@ -48,14 +48,14 @@
   - 확인: 보강 화면에서 과목 등급을 바꾸면 평균·9등급·판정이 즉시 바뀌고, 로드맵에 권장과목과 출처가 보인다
 - [x] **C5. 평가 확장**: RAGAS 5건(4·10·12·24·26) (`llm_judge` 정답 대조는 A10에 포함)
   - 확인: 리포트에 RAGAS 지표 4개가 숫자로 나온다
-  - 결과: Round 2·3 본 채점은 타임아웃·일일 토큰 한도로 nan → 동시 호출 2개로 줄여 2026-11-05에 따로 측정(`evaluation/round3_ragas.md`). faithfulness 0.308 · answer_relevancy 0.338 · context_recall 0.533 · context_precision 0.517, 모두 목표 미달(원인은 README RAGAS 절)
+  - 결과: Round 2·3 본 채점은 타임아웃·일일 토큰 한도로 nan → 동시 호출 2개로 줄여 2026-11-05에 측정. Round 4: faithfulness 0.380 · answer_relevancy 0.315 · context_recall 0.617 · context_precision 0.624, 모두 목표 미달(원인은 README RAGAS 절)
 
 ## 묶음 D · 3차 도구와 개선 루프
 - [x] **D1. `search_programs` + `save_student_profile`(HITL) + 화면 1 "프로필 저장" 승인 모달**
   - 확인: 15번 통과, 17번 멀티턴에서 성적 재입력을 요구하지 않음, 화면에서 승인하기 전에는 저장되지 않음
 - [ ] **D2. 개선 루프 (최대 3회)**: 실패 하나 고르기 → 원인 설명 → 한 곳만 수정 → 28건 재실행 → 커밋
   - 확인: `evaluation/round2_report.md` 통과율 ≥ 85%, guardrail 100%
-  - **결과: 목표 미달.** Round 2 13/28 → Round 3 19/28(68%), guardrail 4/5. 토큰 한도 때문에 '한 곳만 수정'이 아니라 실패 원인 여러 개를 한 번에 고친 뒤 실패 15건만 재채점하고 28건을 다시 돌렸다(1회)
+  - **결과: 목표 미달.** Round 2 13/28 → Round 3 19/28(68%), guardrail 4/5. 토큰 한도 때문에 '한 곳만 수정'이 아니라 실패 원인 여러 개를 한 번에 고친 뒤 실패 15건만 재채점하고 28건을 다시 돌렸다(1회). Round 4(24번 검색 한 곳만 수정 → 28건 재실행)도 19/28: 24 통과, 6은 출력 검사 오탐으로 실패
 - [x] **D3. README 마무리**: 실행 방법(화면 포함), 평가 결과 숫자, 트라이앤에러 회고
   - 확인: README의 숫자가 `round1/2_report.md`와 같고, README대로 따라 하면 화면이 뜬다
   - 결과: README 통과율 표가 round1~3 리포트 숫자와 같음. RAGAS 칸은 미측정으로 표기
