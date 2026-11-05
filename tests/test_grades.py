@@ -174,3 +174,19 @@ def test_group_effects_order():
     assert effects[0]["group"] in ("수학", "과학", "영어")   # 학점 비중이 같으면 지금 등급이 낮은(숫자 큰) 교과가 앞
     sci = next(e for e in effects if e["group"] == "과학")
     assert sci["avg"] == 3.0 and sci["credits"] == 8
+
+
+# ---------- 출력 검사 (요약 속 근거 없는 수치) ----------
+from src.guardrails import check_output  # noqa: E402
+def test_output_check_date_is_not_decimal():
+    assert check_output("교육부 보도자료(2023.12.27)", "2028 수능 통합형") == []
+
+
+def test_output_check_rounded_value_allowed():
+    assert check_output("9등급 환산 약 3.5등급", '{"grade9": 3.54}') == []
+    assert check_output("평균은 2.5.", '{"avg": 2.5}') == []
+
+
+def test_output_check_invented_value_blocked():
+    assert check_output("평균은 대략 2.1~2.3등급대", "수학 3등급, 나머지 2등급") == ["근거 없는 수치: 2.1, 2.3"]
+    assert check_output("환산 약 3.6등급", '{"grade9": 3.54}') == ["근거 없는 수치: 3.6"]

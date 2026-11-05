@@ -192,7 +192,14 @@ def render_tables(tool_results: list[tuple[str, dict]]) -> str:
 GUARANTEE = re.compile(r"(무조건|반드시|100 ?%|확실(히|하게)|틀림없이)\s?.{0,8}(합격|붙)|합격(을|이)?\s?보장")
 NEGATION = re.compile(r"(보장하지|보장할 수 없|보장되지|않|아닙니다|아니|없습니다|수 없|어렵)")
 DISPARAGE = re.compile(r"(전문대|지방대|하위권 ?대학).{0,12}(수준이 낮|급이 낮|못한 (애|학생)|떨어지는 (학교|대학)|가치가 낮)|공부 못하는 (애|학생)들이 가는")
-DECIMAL = re.compile(r"(?<![\d.])\d+\.\d+")
+# 2023.12.27 같은 점 표기 날짜는 소수로 보지 않는다 (Round 4 평가 12번: '2023.12'를 근거 없는 수치로 막음)
+DECIMAL = re.compile(r"(?<![\d.])\d+\.\d+(?!\.?\d)")
+
+
+def _supported(x: str, allowed: set[float]) -> bool:
+    """도구 결과의 수치이거나, 그 수치를 같은 자릿수로 반올림한 값이면 근거가 있다 (Round 4 평가 6번: 3.54를 '약 3.5'로 씀)"""
+    v, digits = abs(float(x)), len(x.split(".")[1])
+    return any(round(a, digits) == v for a in allowed)
 
 
 def check_output(text: str, allowed_text: str) -> list[str]:
@@ -205,7 +212,7 @@ def check_output(text: str, allowed_text: str) -> list[str]:
     if DISPARAGE.search(text):
         violations.append("서열 비하 표현")
     allowed = {abs(float(x)) for x in DECIMAL.findall(allowed_text)}
-    unsupported = sorted({x for x in DECIMAL.findall(text) if abs(float(x)) not in allowed})
+    unsupported = sorted({x for x in DECIMAL.findall(text) if not _supported(x, allowed)})
     if unsupported:
         violations.append(f"근거 없는 수치: {', '.join(unsupported)}")
     return violations
