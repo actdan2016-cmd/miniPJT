@@ -23,11 +23,12 @@ Q1 = [row("1-1", "국어", 4, 2), row("1-1", "수학", 4, 3), row("1-1", "영어
       row("1-1", "사회", 4, 2), row("1-1", "과학", 4, 3), row("1-1", "한국사", 3, 1)]
 
 
-def load_sample():
-    """시연용 가짜 페르소나(평가 22번과 같은 성적 + 등급 없는 과학탐구실험)"""
+def load_sample(semesters=("1-1", "1-2")):
+    """시연용 가짜 페르소나. 고1(1-1·1-2)은 평가 22번과 같은 성적 + 등급 없는 과학탐구실험, 2-1~3-1은 간호 희망 가정 성적"""
     with open(ROOT / "data" / "sample_student_grades.csv", encoding="utf-8-sig") as f:
         return [row(r["semester"], r["subject_group"], int(r["credits"]),
-                    int(r["grade_5"]) if r["grade_5"] else None, r["subject"]) for r in csv.DictReader(f)]
+                    int(r["grade_5"]) if r["grade_5"] else None, r["subject"]) for r in csv.DictReader(f)
+                if r["semester"] in semesters]
 
 
 # ---------- 평균 ----------
@@ -44,6 +45,12 @@ def test_q22_semesters_and_cumulative():
     assert s["cumulative"]["전과목"] == {"sum": 105, "credits": 46, "avg": 2.28}
     assert s["cumulative"]["국영수사"] == {"sum": 72, "credits": 32, "avg": 2.25}
     assert s["cumulative"]["국영수과"] == {"sum": 80, "credits": 32, "avg": 2.5}
+
+
+def test_sample_five_semesters():
+    s = gpa_summary(load_sample(("1-1", "1-2", "2-1", "2-2", "3-1")))
+    assert s["semesters"]["3-1"]["전과목"] == {"sum": 36, "credits": 20, "avg": 1.8}
+    assert s["cumulative"]["전과목"] == {"sum": 249, "credits": 114, "avg": 2.18}
 
 
 def test_no_grade_subject_excluded():

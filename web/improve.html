@@ -24,7 +24,7 @@
 <main class="wrap">
   <div>
     <h1>보강 과목 · What-if</h1>
-    <p class="lead">2학년 1학기 과목별 목표 등급을 바꿔 보면, 고1 누적과 합친 평균·9등급·판정과 남은 학기에 필요한 평균이 바로 다시 계산됩니다.</p>
+    <p class="lead">다음 학기 과목별 목표 등급을 바꿔 보면, 지금까지의 누적과 합친 평균·9등급·판정과 남은 학기에 필요한 평균이 바로 다시 계산됩니다.</p>
   </div>
   <p class="error" id="msg" hidden></p>
   <section class="card" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end">
@@ -44,13 +44,15 @@ renderHeader('improve.html');
 const $ = (id) => document.getElementById(id);
 const profile = Store.load() || emptyProfile();
 const base = validSubjects(profile.subjects);
-let plan = [];      // 2학년 1학기 가정 과목 (기본 = 가장 최근 학기 성적 유지)
+let plan = [];      // 다음 학기 가정 과목 (기본 = 가장 최근 학기 성적 유지)
+let next = null;    // 가정할 다음 학기 (입력한 마지막 학기의 다음). 3학년 1학기까지 다 입력했으면 null
 let targets = [];   // 목표 후보 (자동으로 고른 목표)
 let timer = null;
 
 function initPlan() {
   const last = SEMESTERS.filter((s) => base.some((x) => x.semester === s)).pop();
-  plan = base.filter((x) => x.semester === last && x.grade != null).map((x) => ({ ...x, semester: '2-1', subject: x.subject.replace(/\d$/, '') + '(2-1 가정)' }));
+  next = SEMESTERS[SEMESTERS.indexOf(last) + 1] || null;
+  plan = next ? base.filter((x) => x.semester === last && x.grade != null).map((x) => ({ ...x, semester: next, subject: x.subject.replace(/\d$/, '') + `(${next} 가정)` })) : [];
 }
 
 function stat(title, value, sub) {
@@ -72,7 +74,7 @@ function render(res) {
     t ? el('p', { class: 'note', style: 'background: var(--surface); border: 1px solid var(--line); font-size: 14px' },
       `목표: ${t.univ_name} ${t.unit_name} ${t.track_name} · 2026 ${t.basis} ${fmt(t.cut9)}(9등급) ≈ 5등급 ${fmt(t.target_avg5)} · 출처: ${friendlySource(t.source_doc)}`) : null,
     el('div', { class: 'grid-cards' },
-      stat(`누적 평균 (${c.semesters_done.join('·')})`, fmt(c.avg5), `${c.sum} ÷ ${c.credits}학점 · 2학년 1학기는 가정값`),
+      stat(`누적 평균 (${c.semesters_done.join('·')})`, fmt(c.avg5), `${c.sum} ÷ ${c.credits}학점 · ${semLabel(next)}는 가정값`),
       stat('9등급 환산', fmt(c.grade9), t ? `컷까지 ${t.gap > 0 ? '+' : ''}${fmt(t.gap)}` : ''),
       el('section', { class: 'card' }, el('h2', { class: 'stat-label' }, '판정'), el('div', { style: 'margin-top: 12px' }, el('span', { class: 'tier' }, t ? t.current_label : '–')),
         el('p', { class: 'small', style: 'margin: 8px 0 0' }, t ? [
@@ -80,7 +82,7 @@ function render(res) {
           ' · ',
           t.reachable ? `${fmt(t.required_future_avg)}이면 적정선` : `적정선은 모두 1등급이어도 어려움(필요 ${fmt(t.required_future_avg)})`].join('') : ''))),
     el('div', { class: 'row stretch' },
-      el('section', { class: 'card grow' }, el('h2', {}, '2학년 1학기 목표 등급'), el('p', { class: 'small', style: 'margin: -6px 0 12px' }, '기본값 = 가장 최근 학기 성적 유지 가정 · 학점은 최근 학기와 같다고 가정'),
+      el('section', { class: 'card grow' }, el('h2', {}, `${semLabel(next)} 목표 등급`), el('p', { class: 'small', style: 'margin: -6px 0 12px' }, '기본값 = 가장 최근 학기 성적 유지 가정 · 학점은 최근 학기와 같다고 가정'),
         planList, el('button', { type: 'button', class: 'btn', style: 'margin-top: 12px', onClick: () => { initPlan(); schedule(); } }, '최근 학기 성적 유지로 되돌리기')),
       el('section', { class: 'card', style: 'flex: 1 1 340px' }, el('h2', {}, '1등급 올리면 효과가 큰 교과군'), el('p', { class: 'small', style: 'margin: -6px 0 12px' }, '학점 비중 × 1등급까지 남은 폭 순'),
         el('ol', { class: 'insights', style: 'list-style: none' }, res.group_effects.map((g, i) => el('li', {},
@@ -118,8 +120,13 @@ function schedule() { clearTimeout(timer); timer = setTimeout(run, 250); }
 if (!base.some((x) => x.grade != null)) {
   $('content').replaceChildren(el('div', { class: 'empty-state' }, el('p', {}, '먼저 성적을 입력해 주세요.'),
     el('a', { href: 'index.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '성적 입력하러 가기')));
+} else if (initPlan(), !next) {
+  // 반영 학기(3학년 1학기까지)를 모두 입력했으면 남은 학기가 없어 What-if를 계산할 수 없다
+  $('content').replaceChildren(el('div', { class: 'empty-state' },
+    el('p', {}, '3학년 1학기까지 모두 입력되어 남은 반영 학기가 없습니다. 지금 누적 평균의 판정은 ‘지원 가능 대학’ 화면에서 확인하세요.'),
+    el('p', { class: 'small' }, '중간 학기 기준으로 시뮬레이션하려면 성적 입력 화면에서 그 뒤 학기 과목을 지워 주세요.'),
+    el('a', { href: 'universities.html', class: 'btn primary', style: 'display: inline-flex; padding: 0 24px' }, '지원 가능 대학 보기')));
 } else {
-  initPlan();
   $('kw').value = profile.major || '';
   $('kw').addEventListener('change', () => { targets = []; profile.major = $('kw').value.trim(); Store.save(profile); run(); });
   $('target').addEventListener('change', run);
