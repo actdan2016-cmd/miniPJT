@@ -46,9 +46,9 @@
   - 결과(Round 3): 5·6번 통과, 23번 judge 5점이지만 lookup_admission_results 미호출로 FAIL
 - [x] **C4. 화면 4·5 (보강 과목 What-if · 학습 로드맵)**: 시안 Improve·Roadmap을 옮기고 C3 API에 연결
   - 확인: 보강 화면에서 과목 등급을 바꾸면 평균·9등급·판정이 즉시 바뀌고, 로드맵에 권장과목과 출처가 보인다
-- [ ] **C5. 평가 확장**: RAGAS 5건(4·10·12·24·26) (`llm_judge` 정답 대조는 A10에 포함)
+- [x] **C5. 평가 확장**: RAGAS 5건(4·10·12·24·26) (`llm_judge` 정답 대조는 A10에 포함)
   - 확인: 리포트에 RAGAS 지표 4개가 숫자로 나온다
-  - **미완:** 구현은 했지만 Round 2·3 모두 타임아웃·Bedrock 일일 토큰 한도로 nan. 동시 호출 2개로 줄임. 한도가 풀리면 `--round 3 --ids 4,10,12,24,26 --ragas`
+  - 결과: Round 2·3 본 채점은 타임아웃·일일 토큰 한도로 nan → 동시 호출 2개로 줄여 2026-11-05에 따로 측정(`evaluation/round3_ragas.md`). faithfulness 0.308 · answer_relevancy 0.338 · context_recall 0.533 · context_precision 0.517, 모두 목표 미달(원인은 README RAGAS 절)
 
 ## 묶음 D · 3차 도구와 개선 루프
 - [x] **D1. `search_programs` + `save_student_profile`(HITL) + 화면 1 "프로필 저장" 승인 모달**

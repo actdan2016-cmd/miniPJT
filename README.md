@@ -64,10 +64,27 @@ pip install -r requirements.txt
 5. 테스트: `pytest tests/test_grades.py` · 평가: `python -m evaluation.run_eval --round 2 --ragas`
 
 ## RAGAS 평가 결과
-**미측정.** 정답(reference)이 있는 5문항(4·10·12·24·26, `evaluation/ragas_references.csv`)에 faithfulness·answer_relevancy·context_recall·context_precision을 계산하도록 만들었지만(`run_eval.py --ragas`), Round 2·3 모두 지표가 나오지 않았습니다.
-- Round 2·3: RAGAS 기본 설정(동시 16개 호출, 180초)이 Bedrock 처리량 제한에 걸려 `TimeoutError`가 났습니다. 동시 호출 2개·600초로 줄였습니다(`RunConfig`).
-- 그 뒤 다시 잰 5문항은 계정의 Bedrock **일일 토큰 한도**("Too many tokens per day")에 걸려 에이전트 답변부터 실패했습니다. 이 값은 믿을 수 없어 버렸습니다.
-- 한도가 풀리면 `python -m evaluation.run_eval --round 3 --ids 4,10,12,24,26 --ragas`로 다시 재고 이 칸을 채웁니다. 목표는 SERVICE.md §5(faithfulness ≥ 0.85 등)입니다.
+정답(reference)이 있는 5문항(4·10·12·24·26, `evaluation/ragas_references.csv`)을 Round 3 코드로 따로 쟀습니다(2026-11-05, [리포트](evaluation/round3_ragas.md)). 판정 LLM은 judge와 같은 `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, 임베딩은 Titan v2입니다. **네 지표 모두 목표에 못 미쳤습니다.**
+
+| 지표 | 평균 | 목표 (SERVICE.md §5) |
+|---|---|---|
+| faithfulness | 0.308 | ≥ 0.85 ✘ |
+| answer_relevancy | 0.338 | ≥ 0.80 ✘ |
+| context_recall | 0.533 | ≥ 0.75 ✘ |
+| context_precision | 0.517 | ≥ 0.70 ✘ |
+
+| id | faithfulness | answer_relevancy | context_recall | context_precision |
+|---|---|---|---|---|
+| 4 | 0.100 | 0.360 | 1.000 | 0.583 |
+| 10 | 0.182 | 0.473 | 0.000 | 1.000 |
+| 12 | 0.455 | 0.477 | 1.000 | 1.000 |
+| 24 | 0.333 | 0.000 | 0.000 | 0.000 |
+| 26 | 0.471 | 0.380 | 0.667 | 0.000 |
+
+- **faithfulness가 낮은 이유:** 답변 끝에 코드가 붙이는 고정 안내("2029학년도 시행계획은 2027년 4~5월 공개 예정", "합격을 보장하지 않습니다" 등)는 검색 문서에 없는 문장이라 근거 없는 주장으로 셉니다. 4번은 judge 5점(정답)인데 faithfulness 0.10입니다. 고정 안내를 빼고 재거나 contexts에 안내 문구 출처를 넣어야 실제 환각 정도를 볼 수 있습니다.
+- **24번 context_recall 0:** "전문대 간호학과 내신 반영" 질문에 검색이 4년제 시행계획 청크만 가져와, 넣어 둔 수원과학대·광주보건대·경민대 시행계획을 찾지 못했습니다. 답도 "전문대 자료가 없다"고 했습니다. 대학 유형 필터나 '전문대' 질의 확장이 필요합니다.
+- **10번 context_recall 0:** PDF 표가 텍스트로 풀리며 모집인원 17명이 사라져 정답 근거가 검색 결과에 없습니다(아래 남은 실패와 같은 원인).
+- 처음 두 번(Round 2·3 본 채점)은 RAGAS 기본 동시 16개 호출이 Bedrock 처리량 제한에 걸려 `TimeoutError`(nan)가 났고, 동시 2개·600초(`RunConfig`)로 줄인 뒤 일일 토큰 한도가 풀리고 나서 쟀습니다.
 
 ## 인-아웃 세트 통과율 (자체 평가)
 평가셋 28건(positive 11 · negative 5 · edge 7 · guardrail 5). 문항마다 해당 검사(도구 호출, 숫자 대조, 차단/통과, 거절 신호, llm_judge 의미 판정)를 **모두** 통과해야 PASS입니다. judge는 `us.anthropic.claude-sonnet-4-5-20250929-v1:0`(temperature 0)로 고정했습니다.
@@ -87,7 +104,7 @@ pip install -r requirements.txt
 - **숫자 환각을 막는 장치가 정상 답도 막았다.** LLM 요약에 도구 결과에 없는 소수가 있으면 요약을 빼도록 했습니다. 그런데 결과표가 계산해 보여 주는 값(학점 비중 17.4%)을 요약에 옮겨 쓰자 요약이 통째로 빠져 23번이 judge 1점을 받았습니다. 코드가 그린 표의 값도 근거로 인정하도록 고치자 judge 5점이 됐습니다.
 - **기록에 개인정보가 남았다.** 미들웨어에서 개인정보를 가렸는데도, 체크포인터가 첫 입력을 이력에 원문 그대로 저장하는 것을 테스트로 찾았습니다. 그래프에 넣기 전에 먼저 가리도록 바꾸고, 미들웨어는 2차 방어로 남겼습니다.
 - **채점기도 틀린다.** 출처 설명 속 '32명'을 정답 숫자로 읽는 오류, 구현과 맞지 않는 기대 도구(`classify_chances`가 하는 일을 따로 요구), 데이터를 추가한 뒤 낡은 기대 특성("전문대 컴퓨터는 데이터 없음")을 고쳤습니다. 고친 내용과 이유는 커밋과 이 README에 남겼습니다.
-- **API 한도를 설계에 넣어야 했다.** Bedrock `ThrottlingException`이 채점 중 반복돼 `with_retry`, us → global → sonnet-4-6 대체 모델, 채점 동시 실행 2개로 버텼습니다. RAGAS는 일일 토큰 한도 때문에 끝내 재지 못했습니다.
+- **API 한도를 설계에 넣어야 했다.** Bedrock `ThrottlingException`이 채점 중 반복돼 `with_retry`, us → global → sonnet-4-6 대체 모델, 채점 동시 실행 2개로 버텼습니다. RAGAS는 일일 토큰 한도 때문에 한도가 풀린 다음 날 따로 쟀습니다.
 - **남은 실패와 원인**
   - 10번: PDF 모집인원 표가 텍스트로 풀리며 칸이 뭉개져 인하대 간호 지역균형 17명을 1명으로 읽었습니다. 표를 구조화해 CSV로 넣어야 합니다.
   - 12번: 답은 맞지만(judge 5점), '확인할 수 없다'류 문구를 찾는 거절 신호 검사가 잘못된 전제를 바로잡는 문항에는 맞지 않습니다.

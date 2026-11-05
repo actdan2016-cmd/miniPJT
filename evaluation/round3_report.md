@@ -1090,7 +1090,7 @@ AI 관련 학과를 개설한 대학은 **19개교(4년제 15개, 전문대 4개
 ## Round 2 → 3 변경과 남은 실패 (분석)
 - 바꾼 것: 입력 안내 규칙 `match_guide`(16 등급 체계 되묻기, 25 미래 등급 예측 → 시나리오 제안), 결과표 숫자를 요약 근거로 인정(23), 프롬프트 보강(제도 질문 문서 검색, 5→9 환산 제시, What-if 교과군 순위, 4년제 필터 안내), 채점기 `COVERS`(classify_chances가 search_programs·lookup_admission_results를 포함), 3번 기대 특성 갱신(신구대 추가).
 - 새로 통과: 3·5·16·17·22·25 (13 → 19).
-- RAGAS: 동시 16개 호출 타임아웃과 Bedrock 일일 토큰 한도로 계산되지 않았다(위 표의 nan). 동시 호출을 2개로 줄였고, 한도가 풀린 뒤 4·10·12·24·26만 다시 잰다.
+- RAGAS: 이 실행에서는 동시 16개 호출 타임아웃과 Bedrock 일일 토큰 한도로 계산되지 않았다(위 표의 nan). 동시 호출을 2개로 줄여 한도가 풀린 뒤 4·10·12·24·26만 다시 쟀다 → [round3_ragas.md](round3_ragas.md): faithfulness 0.308 · answer_relevancy 0.338 · context_recall 0.533 · context_precision 0.517 (모두 목표 미달).
 - 남은 실패 9건
   - judge 5점이지만 자동 검사 실패: 11·28(search_programs 미호출), 12(거절 신호 검사가 전제 정정 문항에 맞지 않음), 23(lookup_admission_results 미호출, simulate_improvement가 컷을 함께 돌려줌)
   - 내용 실패: 8(convert_grade_5to9 미호출, 3.34 누락), 10(PDF 표 평탄화로 모집인원 오독), 24(전문대 질문에 4년제 예시), 26(성취도 환산 사례를 평균 포함처럼 설명), 27(학기 평균만으로 누적 계산 불가)
