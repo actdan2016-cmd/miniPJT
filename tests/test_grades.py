@@ -190,3 +190,29 @@ def test_output_check_rounded_value_allowed():
 def test_output_check_invented_value_blocked():
     assert check_output("평균은 대략 2.1~2.3등급대", "수학 3등급, 나머지 2등급") == ["근거 없는 수치: 2.1, 2.3"]
     assert check_output("환산 약 3.6등급", '{"grade9": 3.54}') == ["근거 없는 수치: 3.6"]
+
+
+# ---------- 도구 강제 (Round 5 평가 5·6) ----------
+from src.middleware import match_forced_tool  # noqa: E402
+
+
+@pytest.mark.parametrize("text", [
+    "컴퓨터공학과 지망인데 2학년 때 어떤 과목을 선택해야 유리해?",              # 5번
+    "수학만 3등급이고 나머지는 2등급이야. 간호학과 희망하는데 남은 2·3학년 학습 로드맵 짜줘",  # 6번
+])
+def test_forced_courses_tool(text):
+    assert match_forced_tool(text, text) == "get_recommended_courses"
+
+
+def test_forced_courses_tool_uses_history():
+    assert match_forced_tool("로드맵 짜줘", "간호학과 희망해\n로드맵 짜줘") == "get_recommended_courses"
+
+
+@pytest.mark.parametrize("text", [
+    "2028 수능 국어 선택과목은 화법과작문이랑 언어와매체 중 뭐가 유리해?",       # 12번: 수능 선택과목
+    "위 성적에서 한 단계 위 대학을 노리려면 어떤 과목을 먼저 올려야 효과가 커?",  # 23번: What-if
+    "2학년 때 듣는 과목 중에 성취도 A만 나오고 등급이 없는 과목은 평균에 어떻게 들어가?",  # 26번
+    "2학년 때 어떤 과목을 선택해야 유리해?",                                      # 학과를 모르면 되묻기
+])
+def test_not_forced(text):
+    assert match_forced_tool(text, text) is None

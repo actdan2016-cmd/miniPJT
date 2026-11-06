@@ -9,6 +9,8 @@ InputRuleMiddleware: 위험 요청을 규칙(정규식)으로 먼저 걸러 모�
   - proxy_writing 세특·자소서 등 학생부 대리 작성 (평가 20)
   - injection     지시 무시·시스템 프롬프트·데이터 원본 노출 요구 (평가 21)
 전문대 비하처럼 답은 하되 중립적으로 고쳐 말해야 하는 요청(평가 28)은 막지 않는다.
+  같은 미들웨어에서 학과를 밝힌 과목 선택·로드맵 질문은 첫 모델 호출의 tool_choice를 get_recommended_courses로 고정한다
+  (Round 5 평가 5·6: 프롬프트 지시만으로는 도구 없이 성적부터 되물음).
 """
 import re
 
@@ -75,6 +77,20 @@ def match_guide(text: str, history: str) -> tuple[str, str] | None:
         avg = float(m.group(1))
         g9 = grades.convert_5to9(avg)["grade9"] if 1 <= avg <= 5 else None
         return "clarify_scale", clarify_scale(avg, g9)
+    return None
+
+
+COURSES_RE = re.compile(r"로드맵|권장 ?과목|과목 ?선택|선택 ?과목|(어떤|무슨|어느) ?과목.{0,10}(선택|골라|들어야|들을|이수)")
+DEPT_RE = re.compile(r"[가-힣]{1,10}(학과|공학|학부)|간호|컴퓨터|소프트웨어|인공지능|\bAI\b")
+
+
+def match_forced_tool(text: str, history: str) -> str | None:
+    """첫 호출에서 반드시 불러야 할 도구. 학과를 밝힌(이번 질문이나 앞 대화) 과목 선택·로드맵 질문이면 get_recommended_courses.
+
+    권장과목은 성적 없이도 학과만으로 조회되므로 되묻기 전에 먼저 보여 준다. 수능 선택과목 질문(평가 12)은 제외한다.
+    """
+    if COURSES_RE.search(text) and "수능" not in text and DEPT_RE.search(history):
+        return "get_recommended_courses"
     return None
 
 
@@ -146,10 +162,19 @@ class InputRuleMiddleware(AgentMiddleware):
         # name·response_metadata로 차단 사실과 규칙 종류를 trace에 남긴다 (사용자 답변에는 사유를 보이지 않음)
         return AIMessage(content=content, name="input_guard", response_metadata={"guard": kind})
 
+    def _forced(self, request):
+        """새 질문 직후의 호출이면 강제할 도구를 tool_choice에 넣는다. 도구 결과를 받은 뒤의 호출은 모델에 맡긴다."""
+        messages = request.state["messages"]
+        if not messages or not isinstance(messages[-1], HumanMessage):
+            return request
+        history = "\n".join(_text(m) for m in messages if isinstance(m, HumanMessage))
+        tool = match_forced_tool(_text(messages[-1]), history)
+        return request.override(tool_choice=tool) if tool else request
+
     def wrap_model_call(self, request, handler):
         refusal = self._refusal_or_none(request)
-        return refusal if refusal is not None else handler(request)
+        return refusal if refusal is not None else handler(self._forced(request))
 
     async def awrap_model_call(self, request, handler):
         refusal = self._refusal_or_none(request)
-        return refusal if refusal is not None else await handler(request)
+        return refusal if refusal is not None else await handler(self._forced(request))
